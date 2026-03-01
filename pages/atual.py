@@ -1,10 +1,77 @@
-import streamlit as st, pandas as pd, pickle, hashlib
+import streamlit as st, pandas as pd, pickle, hashlib, requests
 from streamlit_gsheets import GSheetsConnection
 from datetime import datetime, timedelta
 from pathlib import Path
 import streamlit.components.v1 as components
 
 SF = Path(".streamlit/session.pkl")
+
+def send_task_done_email(task_row):
+    def clean(v, fb=""):
+        s = str(v or "").strip()
+        return fb if s in ("", "__", "nan", "None") else s
+
+    try:
+        # Lê secrets — acesso direto por chave, não .get()
+        api_key      = st.secrets["BREVO_API_KEY"]
+        from_name    = st.secrets.get("EMAIL_FROM_NAME", "PMJA Sistema")
+        from_address = st.secrets["EMAIL_FROM_ADDRESS"]
+    except Exception as e:
+        st.warning(f"Secrets não configurados: {e}"); return
+
+    to_email = clean(task_row.get("user_email"))
+    to_name  = clean(task_row.get("user_full_name"), clean(task_row.get("user", "Usuário")))
+    if not to_email:
+        st.warning("Email do autor não encontrado na tarefa."); return
+
+    # Remetente fixo verificado no Brevo; responsável vai em replyTo
+    resp_name  = clean(task_row.get("responsible"), from_name)
+    resp_email = clean(task_row.get("email_responsible"), from_address)
+    title    = clean(task_row.get("title"), "(sem título)")
+    deadline = clean(task_row.get("deadline"))
+    priority = clean(task_row.get("priority"))
+    now      = datetime.now().strftime("%d/%m/%Y às %H:%M")
+
+    html = f"""<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb;">
+  <div style="background:#059669;padding:24px 28px;">
+    <h2 style="margin:0;color:#fff;font-size:18px;">✅ Tarefa Finalizada</h2>
+  </div>
+  <div style="padding:24px 28px;background:#fff;">
+    <p style="margin:0 0 12px;color:#374151;font-size:14px;">Olá, <strong>{to_name}</strong>!</p>
+    <p style="margin:0 0 16px;color:#374151;font-size:14px;">A tarefa que você criou foi marcada como <strong style="color:#059669;">Finalizada</strong>.</p>
+    <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px;margin-bottom:16px;">
+      <p style="margin:0 0 8px;font-size:13px;color:#111827;"><strong>📋 {title}</strong></p>
+      <p style="margin:0 0 4px;font-size:12px;color:#6b7280;">📅 Prazo: {deadline}</p>
+      <p style="margin:0 0 4px;font-size:12px;color:#6b7280;">⚡ Prioridade: {priority}</p>
+      <p style="margin:0;font-size:12px;color:#6b7280;">👤 Responsável: {resp_name}</p>
+    </div>
+    <p style="margin:0;font-size:12px;color:#9ca3af;">Finalizado em {now}</p>
+  </div>
+  <div style="background:#f9fafb;padding:12px 28px;border-top:1px solid #e5e7eb;">
+    <p style="margin:0;font-size:11px;color:#9ca3af;">PMJA — Sistema de Gestão de Materiais</p>
+  </div>
+</div>"""
+
+    payload = {
+        # Sender DEVE ser um email verificado no Brevo
+        "sender":      {"name": from_name,   "email": from_address},
+        "to":          [{"email": to_email,   "name": to_name}],
+        "replyTo":     {"email": resp_email,  "name": resp_name},
+        "subject":     f"✅ Tarefa finalizada: {title}",
+        "htmlContent": html
+    }
+    try:
+        r = requests.post(
+            "https://api.brevo.com/v3/smtp/email",
+            headers={"api-key": api_key, "content-type": "application/json"},
+            json=payload, timeout=15
+        )
+        if r.status_code not in (200, 201):
+            st.warning(f"Brevo erro {r.status_code}: {r.text}")
+        else:
+            st.toast("📧 Email enviado ao autor!", icon="✅")
+    except Exception as e:
+        st.warning(f"Falha ao enviar email: {e}")
 
 def load_session():
     if not SF.exists(): return None
@@ -149,7 +216,15 @@ elif act=="delete" and tid:
 elif act=="move" and tid and tst:
     try:
         df2=conn.read(worksheet="tasks",ttl=0); m=df2['id']==int(tid)
-        if m.any(): df2.loc[df2[m].index[0],'my_task']=tst; df2.loc[df2[m].index[0],'updated_at']=datetime.now().strftime('%d/%m/%Y %H:%M:%S'); conn.update(worksheet="tasks",data=df2); load_data.clear()
+        if m.any():
+            idx2=df2[m].index[0]
+            old_status=df2.loc[idx2,'my_task']
+            df2.loc[idx2,'my_task']=tst
+            df2.loc[idx2,'updated_at']=datetime.now().strftime('%d/%m/%Y %H:%M:%S')
+            conn.update(worksheet="tasks",data=df2); load_data.clear()
+            # Envia email se acabou de ser finalizada
+            if tst=='Finalizada' and old_status!='Finalizada':
+                send_task_done_email(df2.loc[idx2].to_dict())
     except Exception as e: st.error(e)
     st.query_params.clear(); st.rerun()
 
@@ -161,10 +236,12 @@ mins = session_mins()
 fdf = tasks_df.copy()
 if not fdf.empty:
     fmt='%d/%m/%Y %H:%M:%S'
-    fdf['_u']=pd.to_datetime(fdf.get('updated_at',fdf.get('created',None)),format=fmt,errors='coerce')
-    fdf['_c']=pd.to_datetime(fdf['created'],format=fmt,errors='coerce')
-    fdf['_s']=fdf['_u'].fillna(fdf['_c'])  # usa updated_at ou created como fallback
-    fdf=fdf.sort_values('_s',ascending=False).drop(columns=['_u','_c','_s'],errors='ignore')
+    def parse_dt(col):
+        if col not in fdf.columns: return pd.Series([pd.NaT]*len(fdf),index=fdf.index)
+        return pd.to_datetime(fdf[col].replace('',None).replace('__',None),format=fmt,errors='coerce')
+    fdf['_u']=parse_dt('updated_at'); fdf['_c']=parse_dt('created')
+    fdf['_s']=fdf['_u'].fillna(fdf['_c'])
+    fdf=fdf.sort_values('_s',ascending=False,na_position='last').drop(columns=['_u','_c','_s'],errors='ignore')
 
 all_prio = sorted(set(tasks_df['priority'].dropna())) if not tasks_df.empty and 'priority' in tasks_df.columns else prio_list
 all_stat = ['Atrasada','Curto Prazo','Em dia']
@@ -201,7 +278,7 @@ def dialog():
                             'deadline':dl.strftime('%d/%m/%Y'),'status':calc_status(dl.strftime('%d/%m/%Y')),
                             'url_responsible':ur.get('image_url',''),'email_responsible':ur.get('email',''),
                             'created':datetime.now().strftime('%d/%m/%Y %H:%M:%S'),'updated_at':datetime.now().strftime('%d/%m/%Y %H:%M:%S'),
-                            'user':user.get('username',''),'user_id':user.get('id',''),
+                            'user':user.get('full_name',''),'user_id':user.get('id',''),
                             'user_full_name':user.get('full_name',''),'user_email':user.get('email',''),
                             'user_image':user.get('image_url',''),'my_task':'A Fazer'}
                         update_sheet(td,'create') and done("Criada!")
