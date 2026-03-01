@@ -208,7 +208,16 @@ st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 * { font-family: 'Inter', sans-serif !important; }
+/* Remove o cabeçalho, o menu e o rodapé em qualquer tela */
+[data-testid="stHeader"], [data-testid="stToolbar"], footer {
+    display: none !important;
+}
 
+/* Faz o conteúdo colar no topo da tela (importante para mobile) */
+.main .block-container {
+    padding-top: 0rem;
+    padding-bottom: 0rem;
+}
 /* Oculta todos os elementos nativos do Streamlit — inclusive botão de deploy em produção */
 #MainMenu,
 footer,
