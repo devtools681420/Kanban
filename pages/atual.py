@@ -277,7 +277,7 @@ footer * {{ visibility: hidden !important; }}
     position: relative !important;
 }
 
-/* O iframe ocupa toda a tela */
+/* O iframe ocupa toda a tela — desktop: fixed, mobile: relativo com scroll */
 iframe {
     position: fixed !important;
     top: 0 !important; left: 0 !important;
@@ -286,6 +286,30 @@ iframe {
     height: 100dvh !important;
     border: none !important;
     z-index: 9999 !important;
+    overflow: hidden !important;
+}
+@media (max-width: 900px) {
+    iframe {
+        position: relative !important;
+        top: auto !important;
+        left: auto !important;
+        width: 100% !important;
+        height: 100dvh !important;
+        min-height: 100vh !important;
+        overflow: auto !important;
+        z-index: 9999 !important;
+    }
+    /* Remove altura fixa do container do Streamlit em mobile */
+    [data-testid="stAppViewContainer"],
+    [data-testid="stMain"],
+    .main, section.main,
+    [data-testid="stAppViewBlockContainer"],
+    .block-container {
+        height: 100dvh !important;
+        min-height: 100dvh !important;
+        overflow: visible !important;
+        padding: 0 !important;
+    }
 }
 
 .main, [data-testid="stAppViewContainer"] { background: #fff !important; }
@@ -1349,13 +1373,13 @@ document.querySelectorAll('.drop-zone').forEach(zone => {{
 
 
 # ── RENDERIZAÇÃO DO BOARD ─────────────────────────────────────────────────────
-# O CSS do Streamlit injeta position:fixed no iframe para que ele ocupe
-# a tela inteira independente da altura real do conteúdo.
-# height=800 é um valor mínimo — o CSS sobrescreve para 100vh.
+# Desktop: iframe fixed via CSS cobrindo 100vh, sem scroll no iframe.
+# Mobile/tablet: iframe com altura grande o suficiente para scroll funcionar.
+# O CSS @media cuida de alternar entre os dois comportamentos.
 components.html(
     create_board(
         filtered_df, user, image_url, time_remaining,
         st.session_state.show_menu, all_priorities, all_statuses, users_list
     ),
-    height=800, scrolling=False
+    height=4000, scrolling=True
 )
