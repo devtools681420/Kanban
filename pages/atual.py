@@ -2,9 +2,15 @@ import streamlit as st, pandas as pd, pickle, hashlib, requests
 from streamlit_gsheets import GSheetsConnection
 from datetime import datetime, timedelta
 from pathlib import Path
+from zoneinfo import ZoneInfo
 import streamlit.components.v1 as components
 
 SF = Path(".streamlit/session.pkl")
+
+# ── TIMEZONE BRASÍLIA ──
+def now_brt():
+    return datetime.now(ZoneInfo("America/Sao_Paulo"))
+
 
 # ── EMAIL: TAREFA CRIADA (para o responsável) ──
 def send_task_created_email(task_row):
@@ -30,7 +36,7 @@ def send_task_created_email(task_row):
     desc     = clean(task_row.get("description"))
     deadline = clean(task_row.get("deadline"))
     priority = clean(task_row.get("priority"))
-    now      = datetime.now().strftime("%d/%m/%Y às %H:%M")
+    now      = now_brt().strftime("%d/%m/%Y às %H:%M")
 
     desc_block = f'<p style="margin:0 0 4px;font-size:12px;color:#6b7280;">📝 {desc}</p>' if desc else ""
 
@@ -98,7 +104,7 @@ def send_task_done_email(task_row):
     title    = clean(task_row.get("title"), "(sem título)")
     deadline = clean(task_row.get("deadline"))
     priority = clean(task_row.get("priority"))
-    now      = datetime.now().strftime("%d/%m/%Y às %H:%M")
+    now      = now_brt().strftime("%d/%m/%Y às %H:%M")
 
     html = f"""<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb;">
   <div style="background:#059669;padding:24px 28px;">
@@ -189,7 +195,8 @@ conn = st.connection("gsheets",type=GSheetsConnection)
 
 def calc_status(d):
     try:
-        dl = datetime.strptime(d,'%d/%m/%Y').date(); t = datetime.now().date()
+        dl = datetime.strptime(d,'%d/%m/%Y').date()
+        t  = now_brt().date()  # ← horário de Brasília
         return "Atrasada" if dl<t else "Curto Prazo" if dl<=t+timedelta(days=3) else "Em dia"
     except: return "Em dia"
 
@@ -288,7 +295,7 @@ elif act=="move" and tid and tst:
             idx2=df2[m].index[0]
             old_status=df2.loc[idx2,'my_task']
             df2.loc[idx2,'my_task']=tst
-            df2.loc[idx2,'updated_at']=datetime.now().strftime('%d/%m/%Y %H:%M:%S')
+            df2.loc[idx2,'updated_at']=now_brt().strftime('%d/%m/%Y %H:%M:%S')  # ← BRT
             conn.update(worksheet="tasks",data=df2); load_data.clear()
             # Envia email se acabou de ser finalizada
             if tst=='Finalizada' and old_status!='Finalizada':
@@ -336,16 +343,17 @@ def dialog():
             pi = prio_list.index(task['priority']) if not is_new and task.get('priority') in prio_list else 0
             with c1: resp = st.selectbox("Responsável *", users_list, index=ri)
             with c2: prio = st.selectbox("Prioridade", prio_list, index=pi)
-            dl_val = datetime.strptime(task['deadline'],'%d/%m/%Y').date() if not is_new else datetime.now().date()
+            dl_val = datetime.strptime(task['deadline'],'%d/%m/%Y').date() if not is_new else now_brt().date()  # ← BRT
             dl = st.date_input("Data Limite", value=dl_val, format="DD/MM/YYYY")
             if is_new:
                 if st.form_submit_button("Criar",type="primary"):
                     if title and resp:
                         ur=users_df[users_df['full_name']==resp].iloc[0]
+                        ts_now = now_brt().strftime('%d/%m/%Y %H:%M:%S')  # ← BRT
                         td={'title':title,'description':desc,'responsible':resp,'priority':prio,
                             'deadline':dl.strftime('%d/%m/%Y'),'status':calc_status(dl.strftime('%d/%m/%Y')),
                             'url_responsible':ur.get('image_url',''),'email_responsible':ur.get('email',''),
-                            'created':datetime.now().strftime('%d/%m/%Y %H:%M:%S'),'updated_at':datetime.now().strftime('%d/%m/%Y %H:%M:%S'),
+                            'created':ts_now,'updated_at':ts_now,  # ← BRT
                             'user':user.get('full_name',''),'user_id':user.get('id',''),
                             'user_full_name':user.get('full_name',''),'user_email':user.get('email',''),
                             'user_image':user.get('image_url',''),'my_task':'A Fazer'}
@@ -363,7 +371,7 @@ def dialog():
                     td={'id':tid2,'title':title,'description':desc,'responsible':resp,'priority':prio,
                         'deadline':dl.strftime('%d/%m/%Y'),'status':calc_status(dl.strftime('%d/%m/%Y')),
                         'url_responsible':ur.get('image_url',''),'email_responsible':ur.get('email',''),
-                        'updated_at':datetime.now().strftime('%d/%m/%Y %H:%M:%S')}
+                        'updated_at':now_brt().strftime('%d/%m/%Y %H:%M:%S')}  # ← BRT
                     update_sheet(td,'update') and done("Atualizado!")
 
     elif a=='edit_user':
