@@ -208,11 +208,28 @@ st.markdown("""
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 * { font-family: 'Inter', sans-serif !important; }
 
-/* Oculta menus, rodapé e outros elementos nativos do Streamlit */
-#MainMenu, footer, header, .stDeployButton, [data-testid="stToolbar"],
-div[data-testid="stDecoration"], div[data-testid="stStatusWidget"],
-button[kind="header"], [data-testid="collapsedControl"],
-section[data-testid="stSidebar"] { display: none !important; }
+/* Oculta todos os elementos nativos do Streamlit — inclusive botão de deploy em produção */
+#MainMenu,
+footer,
+header,
+.stDeployButton,
+[data-testid="stToolbar"],
+[data-testid="stToolbarActions"],
+[data-testid="stDecoration"],
+[data-testid="stStatusWidget"],
+[data-testid="collapsedControl"],
+[data-testid="stSidebarCollapsedControl"],
+button[kind="header"],
+button[title="Deploy"],
+button[aria-label="Deploy"],
+.stAppDeployButton,
+section[data-testid="stSidebar"],
+div[class*="deployButton"],
+div[class*="toolbar"],
+iframe[title="streamlit_analytics"] { display: none !important; }
+
+/* Remove qualquer margem/padding gerado pelo header oculto */
+[data-testid="stAppViewContainer"] > section:first-child { padding-top: 0 !important; }
 
 .block-container { padding: 0 !important; max-width: 100% !important; }
 .element-container { margin: 0 !important; padding: 0 !important; }
@@ -251,6 +268,7 @@ iframe {
     top: 0 !important; left: 0 !important;
     width: 100vw !important;
     height: 100vh !important;
+    height: 100dvh !important;
     border: none !important;
     z-index: 9999 !important;
 }
@@ -745,6 +763,7 @@ def create_board(df, user_data, img_url, time_rem, show_menu, priorities, status
 
     # ── HTML completo do board ──
     return f'''<!DOCTYPE html><html><head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 /* Reset e fonte base */
@@ -752,6 +771,9 @@ def create_board(df, user_data, img_url, time_rem, show_menu, priorities, status
 ::-webkit-scrollbar{{width:4px;}}
 ::-webkit-scrollbar-thumb{{background:rgba(0,0,0,0.14);border-radius:10px;}}
 html,body{{height:100%;overflow:hidden;background:#fff;}}
+@media (max-width:600px){{
+  html,body{{overflow:auto;height:auto;min-height:100%;}}
+}}
 
 /* ── TOPBAR ── */
 .topbar{{
@@ -967,15 +989,16 @@ html,body{{height:100%;overflow:hidden;background:#fff;}}
 /* ── RESPONSIVO — tablet (≤900px): scroll horizontal no board ── */
 @media (max-width:900px){{
   .tb-sub{{display:none;}}
-  .tb-sep:last-of-type{{display:none;}}
-  .tb-filters{{display:none;}}          /* filtros vão para a gaveta */
+  .tb-filters{{display:none;}}
   .tb-filter-toggle{{display:flex;}}
   .tb-uname{{display:none;}}
   .board{{
     gap:6px;padding:6px;
     margin-top:44px;
+    overflow-x:auto;
+    overflow-y:hidden;
   }}
-  .col{{min-width:240px;}}
+  .col{{min-width:260px;}}
 }}
 
 /* ── RESPONSIVO — mobile (≤600px): board em coluna, topbar compacta ── */
@@ -986,27 +1009,26 @@ html,body{{height:100%;overflow:hidden;background:#fff;}}
   .tb-actions .tb-btn:not(.primary) span{{display:none;}}
   .board{{
     flex-direction:column;
-    height:auto;
-    overflow-x:hidden;
-    overflow-y:auto;
+    height:auto !important;
+    min-height:calc(100vh - 48px);
+    overflow:visible !important;
     padding:6px;
     margin-top:48px;
     gap:6px;
-    /* permite scroll vertical de todo o board */
-    height:calc(100vh - 48px);
   }}
   .col{{
-    min-width:0;width:100%;flex:none;
-    /* altura automática baseada no conteúdo */
-    max-height:none;
+    min-width:0 !important;
+    width:100% !important;
+    flex:none !important;
+    height:auto !important;
+    overflow:visible !important;
   }}
   .drop-zone{{
-    max-height:none;
-    overflow-y:visible;
+    max-height:260px;
+    overflow-y:auto;
   }}
   .filter-drawer{{top:48px;}}
   .tb-menu{{right:10px;}}
-  /* Cards um pouco maiores em mobile */
   .card{{padding:10px 11px;}}
   .card-title{{font-size:13px;}}
 }}
@@ -1189,12 +1211,33 @@ function clearFilters() {{
   applyFilters();
 }}
 
+/* ── RESIZE DINÂMICO ── */
+function fixBoardHeight() {{
+  const topbar = document.querySelector('.topbar');
+  const drawer = document.getElementById('filterDrawer');
+  const board  = document.querySelector('.board');
+  if (!board) return;
+  const topH   = topbar ? topbar.offsetHeight : 44;
+  const drawH  = (drawer && drawer.classList.contains('open')) ? drawer.offsetHeight : 0;
+  const offset = topH + drawH;
+  if (window.innerWidth <= 600) {{
+    board.style.height = 'auto';
+    board.style.marginTop = offset + 'px';
+  }} else {{
+    board.style.height = 'calc(100vh - ' + offset + 'px)';
+    board.style.marginTop = offset + 'px';
+  }}
+}}
+window.addEventListener('resize', fixBoardHeight);
+document.addEventListener('DOMContentLoaded', fixBoardHeight);
+
 /* ── TOGGLE GAVETA DE FILTROS (MOBILE) ── */
 function toggleFilterDrawer() {{
   const drawer = document.getElementById('filterDrawer');
   const btn    = document.getElementById('btnFilterToggle');
   const open   = drawer.classList.toggle('open');
   btn.classList.toggle('active', open);
+  fixBoardHeight();
 }}
 
 /* ── DRAG & DROP ── */
@@ -1241,11 +1284,13 @@ document.querySelectorAll('.drop-zone').forEach(zone => {{
 
 
 # ── RENDERIZAÇÃO DO BOARD ─────────────────────────────────────────────────────
-# Renderiza o board kanban como um iframe em tela cheia
+# O CSS do Streamlit injeta position:fixed no iframe para que ele ocupe
+# a tela inteira independente da altura real do conteúdo.
+# height=800 é um valor mínimo — o CSS sobrescreve para 100vh.
 components.html(
     create_board(
         filtered_df, user, image_url, time_remaining,
         st.session_state.show_menu, all_priorities, all_statuses, users_list
     ),
-    height=None, scrolling=False
+    height=800, scrolling=False
 )
