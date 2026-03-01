@@ -206,6 +206,7 @@ def update_sheet(task_data, action='update'):
 # CSS para esconder o menu, o rodapé e o cabeçalho
 st.markdown("""
 <style>
+
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 * { font-family: 'Inter', sans-serif !important; }
 
