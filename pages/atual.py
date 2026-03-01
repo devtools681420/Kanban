@@ -203,20 +203,15 @@ def update_sheet(task_data, action='update'):
 # ── CSS CUSTOMIZADO ──────────────────────────────────────────────────────────
 # Oculta elementos padrão do Streamlit e posiciona botões invisíveis no DOM
 # (os botões ficam fora da tela mas ainda clicáveis via JavaScript)
+# CSS para esconder o menu, o rodapé e o cabeçalho
 st.markdown("""
 <style>
+#MainMenu {visibility: hidden;}
+footer {visibility: hidden;}
+header {visibility: hidden;}
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 * { font-family: 'Inter', sans-serif !important; }
-/* Remove o cabeçalho, o menu e o rodapé em qualquer tela */
-[data-testid="stHeader"], [data-testid="stToolbar"], footer {
-    display: none !important;
-}
 
-/* Faz o conteúdo colar no topo da tela (importante para mobile) */
-.main .block-container {
-    padding-top: 0rem;
-    padding-bottom: 0rem;
-}
 /* Oculta todos os elementos nativos do Streamlit — inclusive botão de deploy em produção */
 #MainMenu,
 footer,
@@ -760,11 +755,10 @@ def create_board(df, user_data, img_url, time_rem, show_menu, priorities, status
     cols_html = ""
     for key, (accent, zone_bg, hdr_bg) in cols_map.items():
         cols_html += f'''<div class="col" data-col="{key}">
-    <div class="col-hdr" style="border-top:3px solid {accent};background:{hdr_bg};" onclick="toggleCol(this)">
+    <div class="col-hdr" style="border-top:3px solid {accent};background:{hdr_bg};">
       <div class="col-hdr-row">
         <span class="col-title" style="color:{accent};">{key.upper()}</span>
         <span class="col-cnt" id="cnt-{key.replace(' ','-')}" style="background:{accent};">{counts[key]}</span>
-        <span class="col-toggle">▶</span>
       </div>
       <div class="prog-track"><div class="prog-fill" id="prog-{key.replace(' ','-')}" style="width:{pcts[key]:.1f}%;background:{accent};"></div></div>
     </div>
@@ -782,11 +776,7 @@ def create_board(df, user_data, img_url, time_rem, show_menu, priorities, status
 ::-webkit-scrollbar-thumb{{background:rgba(0,0,0,0.14);border-radius:10px;}}
 html,body{{height:100%;overflow:hidden;background:#fff;}}
 @media (max-width:600px){{
-  html,body{{
-    overflow:auto !important;
-    height:auto !important;
-    min-height:100dvh;
-  }}
+  html,body{{overflow:auto;height:auto;min-height:100%;}}
 }}
 
 /* ── TOPBAR ── */
@@ -925,7 +915,6 @@ html,body{{height:100%;overflow:hidden;background:#fff;}}
   height:calc(100vh - 44px);
   padding:8px;margin-top:44px;
   overflow-x:auto;
-  overflow-y:hidden;
 }}
 .col{{
   flex:1;min-width:220px;
@@ -933,18 +922,12 @@ html,body{{height:100%;overflow:hidden;background:#fff;}}
   border:1px solid rgba(0,0,0,0.07);border-radius:12px;
   overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.04);
 }}
-.col-hdr{{
-  padding:10px 12px 8px;flex-shrink:0;
-  border-bottom:1px solid rgba(0,0,0,0.05);
-  cursor:default;
-}}
+.col-hdr{{padding:10px 12px 8px;flex-shrink:0;border-bottom:1px solid rgba(0,0,0,0.05);}}
 .col-hdr-row{{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;}}
 .col-title{{font-size:10px;font-weight:700;letter-spacing:0.7px;text-transform:uppercase;}}
 .col-cnt{{font-size:10px;font-weight:700;color:#fff;padding:1px 7px;border-radius:20px;transition:all 0.2s;}}
 .prog-track{{width:100%;height:2px;background:rgba(0,0,0,0.07);border-radius:10px;overflow:hidden;}}
 .prog-fill{{height:100%;border-radius:10px;opacity:0.6;transition:width 0.3s ease;}}
-/* Seta de collapse — só aparece no mobile */
-.col-toggle{{display:none;font-size:12px;color:#9ca3af;transition:transform 0.2s;margin-left:6px;}}
 
 /* Zona de soltar cards */
 .drop-zone{{
@@ -1022,67 +1005,36 @@ html,body{{height:100%;overflow:hidden;background:#fff;}}
   .col{{min-width:260px;}}
 }}
 
-/* ── RESPONSIVO — mobile (≤600px) ──
-   Board vira lista vertical. Cada coluna é um accordion:
-   clica no header → expande/recolhe os cards.
-   Todos os cards ficam visíveis dentro da coluna expandida (sem altura máxima).
-*/
+/* ── RESPONSIVO — mobile (≤600px): board em coluna, topbar compacta ── */
 @media (max-width:600px){{
   .topbar{{padding:0 10px;gap:6px;height:48px;}}
   .tb-logo{{height:22px;}}
   .tb-title{{display:none;}}
   .tb-actions .tb-btn:not(.primary) span{{display:none;}}
-
-  /* Board ocupa a altura restante e faz scroll vertical */
   .board{{
-    flex-direction:column !important;
+    flex-direction:column;
     height:auto !important;
-    max-height:none !important;
-    overflow-x:hidden !important;
-    overflow-y:auto !important;
-    padding:6px !important;
-    margin-top:48px !important;
-    gap:6px !important;
-    /* altura real = tela - topbar */
-    min-height:calc(100dvh - 48px);
+    min-height:calc(100vh - 48px);
+    overflow:visible !important;
+    padding:6px;
+    margin-top:48px;
+    gap:6px;
   }}
-
-  /* Cada coluna ocupa largura total */
   .col{{
-    flex:none !important;
     min-width:0 !important;
     width:100% !important;
+    flex:none !important;
     height:auto !important;
     overflow:visible !important;
-    border-radius:10px !important;
   }}
-
-  /* Header da coluna vira botão de accordion */
-  .col-hdr{{cursor:pointer !important;user-select:none;}}
-  .col-toggle{{display:inline-block !important;}}
-
-  /* Drop-zone: altura automática, sem limite, scroll interno desligado */
   .drop-zone{{
-    max-height:none !important;
-    height:auto !important;
-    overflow:visible !important;
-    /* animação de colapso */
-    transition:max-height 0.25s ease, padding 0.2s ease;
+    max-height:260px;
+    overflow-y:auto;
   }}
-  /* Coluna recolhida: esconde os cards */
-  .col.collapsed .drop-zone{{
-    max-height:0 !important;
-    overflow:hidden !important;
-    padding:0 6px !important;
-  }}
-  /* Seta gira quando recolhido */
-  .col.collapsed .col-toggle{{transform:rotate(-90deg);}}
-
   .filter-drawer{{top:48px;}}
   .tb-menu{{right:10px;}}
   .card{{padding:10px 11px;}}
   .card-title{{font-size:13px;}}
-  .card-acts{{opacity:1 !important;pointer-events:all !important;}}
 }}
 </style></head><body>
 
@@ -1261,13 +1213,6 @@ function clearFilters() {{
    'filterSearchM','filterPriorityM','filterStatusM','filterResponsibleM']
     .forEach(id=>{{ const el=document.getElementById(id); if(el) el.value=''; }});
   applyFilters();
-}}
-
-/* ── ACCORDION DE COLUNAS (MOBILE) ── */
-function toggleCol(hdr) {{
-  if (window.innerWidth > 600) return; // só age no mobile
-  const col = hdr.closest('.col');
-  col.classList.toggle('collapsed');
 }}
 
 /* ── RESIZE DINÂMICO ── */
