@@ -6,13 +6,82 @@ import streamlit.components.v1 as components
 
 SF = Path(".streamlit/session.pkl")
 
+# ── EMAIL: TAREFA CRIADA (para o responsável) ──
+def send_task_created_email(task_row):
+    def clean(v, fb=""):
+        s = str(v or "").strip()
+        return fb if s in ("", "__", "nan", "None") else s
+
+    try:
+        api_key      = st.secrets["BREVO_API_KEY"]
+        from_name    = st.secrets.get("EMAIL_FROM_NAME", "PMJA Sistema")
+        from_address = st.secrets["EMAIL_FROM_ADDRESS"]
+    except Exception as e:
+        st.warning(f"Secrets não configurados: {e}"); return
+
+    to_email = clean(task_row.get("email_responsible"))
+    to_name  = clean(task_row.get("responsible"), "Responsável")
+    if not to_email:
+        st.warning("Email do responsável não encontrado na tarefa."); return
+
+    author_name  = clean(task_row.get("user_full_name"), clean(task_row.get("user", from_name)))
+    author_email = clean(task_row.get("user_email"), from_address)
+    title    = clean(task_row.get("title"), "(sem título)")
+    desc     = clean(task_row.get("description"))
+    deadline = clean(task_row.get("deadline"))
+    priority = clean(task_row.get("priority"))
+    now      = datetime.now().strftime("%d/%m/%Y às %H:%M")
+
+    desc_block = f'<p style="margin:0 0 4px;font-size:12px;color:#6b7280;">📝 {desc}</p>' if desc else ""
+
+    html = f"""<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb;">
+  <div style="background:#1d4ed8;padding:24px 28px;">
+    <h2 style="margin:0;color:#fff;font-size:18px;">📋 Nova Tarefa Atribuída</h2>
+  </div>
+  <div style="padding:24px 28px;background:#fff;">
+    <p style="margin:0 0 12px;color:#374151;font-size:14px;">Olá, <strong>{to_name.split()[0]}</strong>!</p>
+    <p style="margin:0 0 16px;color:#374151;font-size:14px;">Uma nova tarefa foi criada e atribuída a você por <strong>{author_name}</strong>.</p>
+    <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:16px;margin-bottom:16px;">
+      <p style="margin:0 0 8px;font-size:13px;color:#111827;"><strong>📋 {title}</strong></p>
+      {desc_block}
+      <p style="margin:0 0 4px;font-size:12px;color:#6b7280;">📅 Prazo: {deadline}</p>
+      <p style="margin:0;font-size:12px;color:#6b7280;">⚡ Prioridade: {priority}</p>
+    </div>
+    <p style="margin:0;font-size:12px;color:#9ca3af;">Criado em {now}</p>
+  </div>
+  <div style="background:#f9fafb;padding:12px 28px;border-top:1px solid #e5e7eb;">
+    <p style="margin:0;font-size:11px;color:#9ca3af;">PMJA — Sistema de Gestão de Materiais</p>
+  </div>
+</div>"""
+
+    payload = {
+        "sender":      {"name": from_name,    "email": from_address},
+        "to":          [{"email": to_email,    "name": to_name}],
+        "replyTo":     {"email": author_email, "name": author_name},
+        "subject":     f"📋 Nova tarefa: {title}",
+        "htmlContent": html
+    }
+    try:
+        r = requests.post(
+            "https://api.brevo.com/v3/smtp/email",
+            headers={"api-key": api_key, "content-type": "application/json"},
+            json=payload, timeout=15
+        )
+        if r.status_code not in (200, 201):
+            st.warning(f"Brevo erro {r.status_code}: {r.text}")
+        else:
+            st.toast("📧 Email enviado ao responsável!", icon="✅")
+    except Exception as e:
+        st.warning(f"Falha ao enviar email: {e}")
+
+
+# ── EMAIL: TAREFA FINALIZADA (para o autor) ──
 def send_task_done_email(task_row):
     def clean(v, fb=""):
         s = str(v or "").strip()
         return fb if s in ("", "__", "nan", "None") else s
 
     try:
-        # Lê secrets — acesso direto por chave, não .get()
         api_key      = st.secrets["BREVO_API_KEY"]
         from_name    = st.secrets.get("EMAIL_FROM_NAME", "PMJA Sistema")
         from_address = st.secrets["EMAIL_FROM_ADDRESS"]
@@ -24,7 +93,6 @@ def send_task_done_email(task_row):
     if not to_email:
         st.warning("Email do autor não encontrado na tarefa."); return
 
-    # Remetente fixo verificado no Brevo; responsável vai em replyTo
     resp_name  = clean(task_row.get("responsible"), from_name)
     resp_email = clean(task_row.get("email_responsible"), from_address)
     title    = clean(task_row.get("title"), "(sem título)")
@@ -53,7 +121,6 @@ def send_task_done_email(task_row):
 </div>"""
 
     payload = {
-        # Sender DEVE ser um email verificado no Brevo
         "sender":      {"name": from_name,   "email": from_address},
         "to":          [{"email": to_email,   "name": to_name}],
         "replyTo":     {"email": resp_email,  "name": resp_name},
@@ -72,6 +139,7 @@ def send_task_done_email(task_row):
             st.toast("📧 Email enviado ao autor!", icon="✅")
     except Exception as e:
         st.warning(f"Falha ao enviar email: {e}")
+
 
 def load_session():
     if not SF.exists(): return None
@@ -281,7 +349,9 @@ def dialog():
                             'user':user.get('full_name',''),'user_id':user.get('id',''),
                             'user_full_name':user.get('full_name',''),'user_email':user.get('email',''),
                             'user_image':user.get('image_url',''),'my_task':'A Fazer'}
-                        update_sheet(td,'create') and done("Criada!")
+                        if update_sheet(td,'create'):
+                            send_task_created_email(td)
+                            done("Criada!")
                     else: st.error("Preencha os campos obrigatórios")
             else:
                 b1,b2=st.columns(2)
