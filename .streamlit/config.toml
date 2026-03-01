@@ -1,2 +1,17 @@
 [theme]
 primaryColor = "#0075be"
+
+# Arquivo: .streamlit/config.toml
+# Coloque este arquivo na pasta .streamlit/ do seu projeto
+
+[client]
+showSidebarNavigation = false
+
+[browser]
+gatherUsageStats = false
+
+[server]
+headless = true
+
+[theme]
+base = "light"
