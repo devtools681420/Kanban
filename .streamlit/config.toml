@@ -1,5 +1,6 @@
 [theme]
 primaryColor = "#0075be"
+# Se quiser adicionar mais cores de tema, coloque-as aqui dentro, sem repetir [theme]
 
 [client]
 showSidebarNavigation = false
@@ -9,6 +10,3 @@ gatherUsageStats = false
 
 [server]
 headless = true
-
-[theme]
-base = "light"
