@@ -765,7 +765,7 @@ html,body{{height:100%;overflow:hidden;background:#fff;}}
 .tb-title{{font-size:12px;font-weight:600;color:#111827;flex-shrink:0;}}
 .tb-sub{{font-size:10px;color:#9ca3af;flex-shrink:0;}}
 
-/* Grupo de filtros na topbar */
+/* Grupo de filtros na topbar — desktop */
 .tb-filters{{
   display:flex;align-items:center;gap:6px;
   margin-left:auto;
@@ -790,17 +790,17 @@ html,body{{height:100%;overflow:hidden;background:#fff;}}
   font-size:11px;
   color:#374151;
   outline:none;
-  width:160px;
+  width:140px;
   transition:border-color 0.15s,width 0.2s,background 0.15s;
 }}
 .tb-search input:focus{{
   border-color:#1d4ed8;
   background:#fff;
-  width:200px;
+  width:180px;
 }}
 .tb-search input::placeholder{{color:#9ca3af;}}
 
-/* Select de filtro (prioridade / status) */
+/* Select de filtro */
 .tb-select{{
   height:26px;
   padding:0 22px 0 8px;
@@ -811,34 +811,58 @@ html,body{{height:100%;overflow:hidden;background:#fff;}}
   font-size:11px;color:#374151;
   outline:none;cursor:pointer;
   transition:border-color 0.15s,background-color 0.15s;
-  max-width:130px;
+  max-width:120px;
   flex-shrink:1;
 }}
 .tb-select:focus{{border-color:#1d4ed8;background-color:#fff;}}
-/* Filtro ativo: destaque visual em azul */
-.tb-select.active, .tb-search input.active{{
-  border-color:#1d4ed8;
-  background-color:#eff6ff;
-  color:#1d4ed8;
-  font-weight:500;
+.tb-select.active,.tb-search input.active{{
+  border-color:#1d4ed8;background-color:#eff6ff;color:#1d4ed8;font-weight:500;
 }}
 
-/* Botão de limpar filtros (aparece só quando há filtro ativo) */
+/* Botão limpar filtros */
 .tb-clear{{
   display:none;align-items:center;justify-content:center;
-  height:22px;width:22px;
-  border-radius:5px;border:1px solid rgba(0,0,0,0.1);
+  height:22px;width:22px;border-radius:5px;
+  border:1px solid rgba(0,0,0,0.1);
   background:#fff;color:#6b7280;
-  cursor:pointer;font-size:11px;font-weight:600;
-  flex-shrink:0;
-  transition:all 0.13s;
+  cursor:pointer;font-size:11px;font-weight:600;flex-shrink:0;transition:all 0.13s;
 }}
 .tb-clear:hover{{background:#fef2f2;color:#dc2626;border-color:#fecaca;}}
 .tb-clear.visible{{display:flex;}}
 
+/* Botão de filtros mobile (hamburguer de filtros) */
+.tb-filter-toggle{{
+  display:none;align-items:center;justify-content:center;
+  height:26px;width:26px;border-radius:6px;
+  border:1px solid rgba(0,0,0,0.1);background:#f9fafb;
+  color:#374151;cursor:pointer;flex-shrink:0;transition:all 0.13s;
+}}
+.tb-filter-toggle:hover{{background:#f3f4f6;}}
+.tb-filter-toggle.active{{background:#eff6ff;border-color:#1d4ed8;color:#1d4ed8;}}
+
+/* Gaveta de filtros mobile */
+.filter-drawer{{
+  display:none;
+  position:fixed;top:44px;left:0;right:0;z-index:90;
+  background:#fff;border-bottom:1px solid rgba(0,0,0,0.08);
+  padding:10px 14px;gap:8px;
+  flex-wrap:wrap;align-items:center;
+  box-shadow:0 4px 12px rgba(0,0,0,0.06);
+}}
+.filter-drawer.open{{display:flex;}}
+.filter-drawer .tb-search{{flex:1;min-width:140px;}}
+.filter-drawer .tb-search input{{width:100%;}}
+.filter-drawer .tb-select{{flex:1;min-width:100px;max-width:none;}}
+.filter-drawer .tb-clear{{margin-left:auto;}}
+
 /* Botões de ação na topbar */
 .tb-actions{{display:flex;align-items:center;gap:4px;flex-shrink:0;margin-left:8px;}}
-.tb-btn{{display:flex;align-items:center;gap:4px;height:26px;padding:0 9px;border-radius:6px;border:1px solid rgba(0,0,0,0.1);background:#f9fafb;color:#374151;font-size:11px;font-weight:500;cursor:pointer;transition:all 0.13s;white-space:nowrap;}}
+.tb-btn{{
+  display:flex;align-items:center;gap:4px;height:26px;padding:0 9px;
+  border-radius:6px;border:1px solid rgba(0,0,0,0.1);
+  background:#f9fafb;color:#374151;font-size:11px;font-weight:500;
+  cursor:pointer;transition:all 0.13s;white-space:nowrap;
+}}
 .tb-btn:hover{{background:#f3f4f6;border-color:rgba(0,0,0,0.16);}}
 .tb-btn.primary{{background:#1d4ed8;border-color:#1d4ed8;color:#fff;}}
 .tb-btn.primary:hover{{background:#1e40af;}}
@@ -848,15 +872,30 @@ html,body{{height:100%;overflow:hidden;background:#fff;}}
 .tb-uname{{font-size:10px;font-weight:600;color:#374151;}}
 
 /* Menu dropdown de configurações */
-.tb-menu{{position:fixed;top:46px;right:14px;background:#fff;border:1px solid rgba(0,0,0,0.1);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,0.1);z-index:200;min-width:160px;overflow:hidden;}}
+.tb-menu{{
+  position:fixed;top:46px;right:14px;background:#fff;
+  border:1px solid rgba(0,0,0,0.1);border-radius:8px;
+  box-shadow:0 8px 24px rgba(0,0,0,0.1);
+  z-index:200;min-width:160px;overflow:hidden;
+}}
 .menu-item{{padding:8px 14px;font-size:11px;color:#374151;cursor:pointer;}}
 .menu-item:hover{{background:#f3f4f6;}}
 .menu-item.menu-danger{{color:#dc2626;}}
 .menu-item.menu-danger:hover{{background:#fef2f2;}}
 
-/* ── BOARD / COLUNAS ── */
-.board{{display:flex;gap:8px;height:calc(100vh - 44px);padding:8px;margin-top:44px;}}
-.col{{flex:1;min-width:200px;display:flex;flex-direction:column;border:1px solid rgba(0,0,0,0.07);border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.04);}}
+/* ── BOARD / COLUNAS — desktop ── */
+.board{{
+  display:flex;gap:8px;
+  height:calc(100vh - 44px);
+  padding:8px;margin-top:44px;
+  overflow-x:auto;
+}}
+.col{{
+  flex:1;min-width:220px;
+  display:flex;flex-direction:column;
+  border:1px solid rgba(0,0,0,0.07);border-radius:12px;
+  overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.04);
+}}
 .col-hdr{{padding:10px 12px 8px;flex-shrink:0;border-bottom:1px solid rgba(0,0,0,0.05);}}
 .col-hdr-row{{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;}}
 .col-title{{font-size:10px;font-weight:700;letter-spacing:0.7px;text-transform:uppercase;}}
@@ -864,21 +903,41 @@ html,body{{height:100%;overflow:hidden;background:#fff;}}
 .prog-track{{width:100%;height:2px;background:rgba(0,0,0,0.07);border-radius:10px;overflow:hidden;}}
 .prog-fill{{height:100%;border-radius:10px;opacity:0.6;transition:width 0.3s ease;}}
 
-/* Zona de soltar cards (drop zone) */
-.drop-zone{{flex:1;overflow-y:auto;overflow-x:hidden;padding:6px;display:flex;flex-direction:column;gap:6px;min-height:0;}}
+/* Zona de soltar cards */
+.drop-zone{{
+  flex:1;overflow-y:auto;overflow-x:hidden;
+  padding:6px;display:flex;flex-direction:column;gap:6px;min-height:60px;
+}}
 .drop-zone.over{{filter:brightness(0.94);outline:2px dashed rgba(0,0,0,0.18);border-radius:8px;}}
 
 /* ── CARDS ── */
-.card{{background:rgba(255,255,255,0.8);border:1px solid rgba(255,255,255,0.95);border-radius:8px;padding:9px 10px;cursor:grab;position:relative;transition:box-shadow 0.14s,transform 0.14s,background 0.14s,opacity 0.2s;flex-shrink:0;backdrop-filter:blur(4px);}}
+.card{{
+  background:rgba(255,255,255,0.8);border:1px solid rgba(255,255,255,0.95);
+  border-radius:8px;padding:9px 10px;cursor:grab;position:relative;
+  transition:box-shadow 0.14s,transform 0.14s,background 0.14s,opacity 0.2s;
+  flex-shrink:0;backdrop-filter:blur(4px);
+}}
 .card:hover{{background:#fff;box-shadow:0 3px 12px rgba(0,0,0,0.1);transform:translateY(-1px);}}
 .card:hover .card-acts{{opacity:1;pointer-events:all;}}
 .card:active{{cursor:grabbing;}}
-.card.dragging{{opacity:0.35;}}   /* Card sendo arrastado fica semitransparente */
-.card.hidden{{display:none;}}     /* Card ocultado pelo filtro */
+.card.dragging{{opacity:0.35;}}
+.card.hidden{{display:none;}}
 
-/* Botões de ação do card (editar/excluir) — aparecem no hover */
-.card-acts{{position:absolute;top:7px;right:7px;display:flex;gap:3px;opacity:0;pointer-events:none;transition:opacity 0.13s;}}
-.act{{width:20px;height:20px;border-radius:5px;border:1px solid rgba(0,0,0,0.09);background:rgba(255,255,255,0.9);color:#6b7280;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.12s;}}
+/* Botões de ação do card */
+.card-acts{{
+  position:absolute;top:7px;right:7px;display:flex;gap:3px;
+  opacity:0;pointer-events:none;transition:opacity 0.13s;
+}}
+/* Em touch: botões sempre visíveis */
+@media (hover:none) {{
+  .card-acts{{opacity:1;pointer-events:all;}}
+}}
+.act{{
+  width:20px;height:20px;border-radius:5px;
+  border:1px solid rgba(0,0,0,0.09);background:rgba(255,255,255,0.9);
+  color:#6b7280;cursor:pointer;display:flex;align-items:center;justify-content:center;
+  transition:all 0.12s;
+}}
 .act:hover{{background:#f3f4f6;color:#111827;}}
 .act-d:hover{{background:#fef2f2 !important;color:#dc2626 !important;}}
 .card-title{{font-size:12px;font-weight:600;color:#111827;line-height:1.4;margin-bottom:4px;padding-right:48px;word-break:break-word;}}
@@ -887,14 +946,14 @@ html,body{{height:100%;overflow:hidden;background:#fff;}}
 
 /* ── BADGES ── */
 .badge{{display:inline-flex;align-items:center;font-size:9px;font-weight:600;padding:2px 6px;border-radius:4px;text-transform:uppercase;letter-spacing:0.3px;border:1px solid transparent;line-height:1.4;}}
-.b-high{{background:#fef2f2;color:#dc2626;border-color:#fecaca;}}  /* Prioridade alta */
-.b-med{{background:#fffbeb;color:#d97706;border-color:#fde68a;}}   /* Prioridade média */
-.b-low{{background:#f0fdf4;color:#16a34a;border-color:#bbf7d0;}}   /* Prioridade baixa */
-.b-late{{background:#fef2f2;color:#b91c1c;border-color:#fecaca;}}  /* Status: Atrasada */
-.b-soon{{background:#fff7ed;color:#c2410c;border-color:#fed7aa;}}  /* Status: Curto Prazo */
-.b-ok{{background:#f0fdf4;color:#15803d;border-color:#bbf7d0;}}    /* Status: Em dia */
+.b-high{{background:#fef2f2;color:#dc2626;border-color:#fecaca;}}
+.b-med{{background:#fffbeb;color:#d97706;border-color:#fde68a;}}
+.b-low{{background:#f0fdf4;color:#16a34a;border-color:#bbf7d0;}}
+.b-late{{background:#fef2f2;color:#b91c1c;border-color:#fecaca;}}
+.b-soon{{background:#fff7ed;color:#c2410c;border-color:#fed7aa;}}
+.b-ok{{background:#f0fdf4;color:#15803d;border-color:#bbf7d0;}}
 
-/* Rodapé do card: data + responsável */
+/* Rodapé do card */
 .card-foot{{display:flex;align-items:center;justify-content:space-between;gap:6px;flex-wrap:wrap;}}
 .card-date{{font-size:9.5px;color:#9ca3af;}}
 .card-user{{display:flex;align-items:center;gap:4px;flex-shrink:0;}}
@@ -902,8 +961,55 @@ html,body{{height:100%;overflow:hidden;background:#fff;}}
 .av-fb{{width:18px;height:18px;border-radius:50%;background:#e5e7eb;color:#374151;font-size:8px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;}}
 .card-user span{{font-size:10px;color:#6b7280;font-weight:500;}}
 
-/* Toast de feedback (ex: "Salvando...") */
+/* Toast */
 .toast{{position:fixed;bottom:12px;right:12px;background:#111827;color:#f9fafb;padding:7px 14px;border-radius:7px;font-size:11px;font-weight:500;display:none;z-index:9999;}}
+
+/* ── RESPONSIVO — tablet (≤900px): scroll horizontal no board ── */
+@media (max-width:900px){{
+  .tb-sub{{display:none;}}
+  .tb-sep:last-of-type{{display:none;}}
+  .tb-filters{{display:none;}}          /* filtros vão para a gaveta */
+  .tb-filter-toggle{{display:flex;}}
+  .tb-uname{{display:none;}}
+  .board{{
+    gap:6px;padding:6px;
+    margin-top:44px;
+  }}
+  .col{{min-width:240px;}}
+}}
+
+/* ── RESPONSIVO — mobile (≤600px): board em coluna, topbar compacta ── */
+@media (max-width:600px){{
+  .topbar{{padding:0 10px;gap:6px;height:48px;}}
+  .tb-logo{{height:22px;}}
+  .tb-title{{display:none;}}
+  .tb-actions .tb-btn:not(.primary) span{{display:none;}}
+  .board{{
+    flex-direction:column;
+    height:auto;
+    overflow-x:hidden;
+    overflow-y:auto;
+    padding:6px;
+    margin-top:48px;
+    gap:6px;
+    /* permite scroll vertical de todo o board */
+    height:calc(100vh - 48px);
+  }}
+  .col{{
+    min-width:0;width:100%;flex:none;
+    /* altura automática baseada no conteúdo */
+    max-height:none;
+  }}
+  .drop-zone{{
+    max-height:none;
+    overflow-y:visible;
+  }}
+  .filter-drawer{{top:48px;}}
+  .tb-menu{{right:10px;}}
+  /* Cards um pouco maiores em mobile */
+  .card{{padding:10px 11px;}}
+  .card-title{{font-size:13px;}}
+}}
 </style></head><body>
 
 <!-- ── TOPBAR ── -->
@@ -932,6 +1038,11 @@ html,body{{height:100%;overflow:hidden;background:#fff;}}
     <button class="tb-clear" id="btnClear" title="Limpar filtros" onclick="clearFilters()">✕</button>
   </div>
 
+  <!-- Botão toggle de filtros (visível apenas em mobile/tablet) -->
+  <button class="tb-filter-toggle" id="btnFilterToggle" onclick="toggleFilterDrawer()" title="Filtros">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>
+  </button>
+
   <!-- Botões de ação: nova tarefa e menu de configurações -->
   <div class="tb-actions">
     <button class="tb-btn primary" onclick="sendAction('create')">+ Nova tarefa</button>
@@ -943,6 +1054,25 @@ html,body{{height:100%;overflow:hidden;background:#fff;}}
 </div>
 
 {menu_html}
+
+<!-- Gaveta de filtros mobile/tablet -->
+<div class="filter-drawer" id="filterDrawer">
+  <div class="tb-search">
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+    <input type="text" id="filterSearchM" placeholder="Buscar…" oninput="applyFilters()">
+  </div>
+  <select class="tb-select" id="filterPriorityM" onchange="applyFilters()">
+    {prio_opts}
+  </select>
+  <select class="tb-select" id="filterStatusM" onchange="applyFilters()">
+    {status_opts}
+  </select>
+  <select class="tb-select" id="filterResponsibleM" onchange="applyFilters()">
+    {resp_opts}
+  </select>
+  <button class="tb-clear" id="btnClearM" title="Limpar" onclick="clearFilters()">✕</button>
+</div>
+
 <div class="toast" id="toast">Salvando…</div>
 <div class="board">{cols_html}</div>
 
@@ -1003,20 +1133,29 @@ function move(id, status) {{
  * diretamente no DOM sem recarregar a página.
  * Atualiza contadores e barras de progresso de cada coluna.
  */
+function getVal(id){{ const el=document.getElementById(id); return el?(el.value||'').toLowerCase().trim():''; }}
+
 function applyFilters() {{
-  const search      = (document.getElementById('filterSearch').value      || '').toLowerCase().trim();
-  const priority    = (document.getElementById('filterPriority').value    || '').toLowerCase().trim();
-  const status      = (document.getElementById('filterStatus').value      || '').toLowerCase().trim();
-  const responsible = (document.getElementById('filterResponsible').value || '').toLowerCase().trim();
+  // Lê filtros do desktop e da gaveta mobile (usa o que tiver valor)
+  const search      = getVal('filterSearch')      || getVal('filterSearchM');
+  const priority    = getVal('filterPriority')    || getVal('filterPriorityM');
+  const status      = getVal('filterStatus')      || getVal('filterStatusM');
+  const responsible = getVal('filterResponsible') || getVal('filterResponsibleM');
 
   const hasFilter = search || priority || status || responsible;
 
-  // Exibe/oculta botão de limpar filtros e aplica classe 'active' nos inputs
+  // Desktop
   document.getElementById('btnClear').classList.toggle('visible', hasFilter);
   document.getElementById('filterSearch').classList.toggle('active', !!search);
   document.getElementById('filterPriority').classList.toggle('active', !!priority);
   document.getElementById('filterStatus').classList.toggle('active', !!status);
   document.getElementById('filterResponsible').classList.toggle('active', !!responsible);
+  // Mobile
+  document.getElementById('btnClearM').classList.toggle('visible', hasFilter);
+  document.getElementById('filterSearchM').classList.toggle('active', !!search);
+  document.getElementById('filterPriorityM').classList.toggle('active', !!priority);
+  document.getElementById('filterStatusM').classList.toggle('active', !!status);
+  document.getElementById('filterResponsibleM').classList.toggle('active', !!responsible);
 
   // Filtra cada card individualmente
   const cards = document.querySelectorAll('.card');
@@ -1044,11 +1183,18 @@ function applyFilters() {{
  * clearFilters — limpa todos os campos de filtro e reaplica (mostra tudo).
  */
 function clearFilters() {{
-  document.getElementById('filterSearch').value      = '';
-  document.getElementById('filterPriority').value    = '';
-  document.getElementById('filterStatus').value      = '';
-  document.getElementById('filterResponsible').value = '';
+  ['filterSearch','filterPriority','filterStatus','filterResponsible',
+   'filterSearchM','filterPriorityM','filterStatusM','filterResponsibleM']
+    .forEach(id=>{{ const el=document.getElementById(id); if(el) el.value=''; }});
   applyFilters();
+}}
+
+/* ── TOGGLE GAVETA DE FILTROS (MOBILE) ── */
+function toggleFilterDrawer() {{
+  const drawer = document.getElementById('filterDrawer');
+  const btn    = document.getElementById('btnFilterToggle');
+  const open   = drawer.classList.toggle('open');
+  btn.classList.toggle('active', open);
 }}
 
 /* ── DRAG & DROP ── */
