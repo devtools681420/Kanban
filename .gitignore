@@ -1,0 +1,29 @@
+# Arquivos de sessão (gerados automaticamente)
+.streamlit/session.pkl
+.streamlit/*.pkl
+
+# Credenciais (NUNCA versionar)
+.streamlit/secrets.toml
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
