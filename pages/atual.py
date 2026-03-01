@@ -300,7 +300,7 @@ div[data-testid="stDialog"] [data-testid="stHorizontalBlock"] {
 # ── ESTADO DA SESSÃO ─────────────────────────────────────────────────────────
 # Inicializa variáveis de estado caso ainda não existam
 for key, val in [
-    ('dialog_action', None),    # Ação do diálogo atual: 'create', 'edit', 'delete' ou None
+    ('dialog_action', None),    # Ação do diálogo atual: 'create', 'edit', 'delete', 'edit_user' ou None
     ('dialog_task_id', None),   # ID da tarefa sendo editada/excluída
     ('last_button_clicked', None),
     ('show_menu', False)        # Controla a exibição do menu de opções
@@ -336,6 +336,13 @@ elif iframe_action == "recalc":
     if recalculate_all_status():
         load_sheets_data.clear()
         st.session_state.show_menu = False
+    st.query_params.clear()
+    st.rerun()
+
+elif iframe_action == "edit_user":
+    # Abre o diálogo de edição do perfil do usuário logado
+    st.session_state.dialog_action = "edit_user"
+    st.session_state.show_menu = False
     st.query_params.clear()
     st.rerun()
 
@@ -401,7 +408,7 @@ all_statuses = ['Atrasada', 'Curto Prazo', 'Em dia']
 
 
 # ── DIÁLOGO DE GERENCIAMENTO DE TAREFAS ──────────────────────────────────────
-@st.dialog("Gerenciar Tarefa")
+@st.dialog("Criar / Editar Tarefa")
 def manage_task_dialog():
     """
     Exibe o diálogo modal para criar, editar ou excluir uma tarefa.
@@ -410,7 +417,7 @@ def manage_task_dialog():
     action  = st.session_state.dialog_action
     task_id = st.session_state.dialog_task_id
 
-    if action not in ['create', 'edit', 'delete']:
+    if action not in ['create', 'edit', 'delete', 'edit_user']:
         st.session_state.dialog_action = None
         st.rerun()
         return
@@ -504,6 +511,63 @@ def manage_task_dialog():
                     st.session_state.dialog_action = None
                     st.rerun()
 
+    elif action == 'edit_user':
+        # ── Formulário de edição do perfil do usuário logado ──
+        st.markdown("##### Editar Perfil")
+        with st.form("edit_user_form"):
+            full_name = st.text_input("Nome completo", value=user.get('full_name', ''))
+            email     = st.text_input("E-mail", value=user.get('email', ''), disabled=True,
+                                      help="O e-mail não pode ser alterado.")
+            image_url_input = st.text_input("URL da foto de perfil", value=user.get('image_url', ''))
+
+            # Prévia da foto se URL preenchida
+            preview_url = image_url_input.strip() if image_url_input else user.get('image_url', '')
+            if preview_url:
+                st.image(preview_url, width=60, caption="Prévia")
+
+            new_password    = st.text_input("Nova senha (deixe vazio para não alterar)",
+                                            type="password", placeholder="••••••••")
+            confirm_password = st.text_input("Confirmar nova senha",
+                                             type="password", placeholder="••••••••")
+
+            b1, b2 = st.columns(2)
+            with b1: save   = st.form_submit_button("Salvar", type="primary", use_container_width=True)
+            with b2: cancel = st.form_submit_button("Cancelar", use_container_width=True)
+
+            if cancel:
+                st.session_state.dialog_action = None
+                st.rerun()
+
+            if save:
+                if new_password and new_password != confirm_password:
+                    st.error("As senhas não coincidem.")
+                elif not full_name.strip():
+                    st.error("O nome completo é obrigatório.")
+                else:
+                    try:
+                        import hashlib
+                        df_auth = conn.read(worksheet="users_auth", ttl=0)
+                        uid = user.get('id')
+                        mask = df_auth['id'] == uid
+                        if mask.any():
+                            idx = df_auth[mask].index[0]
+                            df_auth.loc[idx, 'full_name'] = full_name.strip()
+                            df_auth.loc[idx, 'image_url'] = image_url_input.strip()
+                            if new_password:
+                                # Hash SHA-256 da nova senha
+                                hashed = hashlib.sha256(new_password.encode()).hexdigest()
+                                df_auth.loc[idx, 'password'] = hashed
+                            conn.update(worksheet="users_auth", data=df_auth)
+                            # Atualiza o session_state com os novos dados
+                            st.session_state.user_data['full_name'] = full_name.strip()
+                            st.session_state.user_data['image_url'] = image_url_input.strip()
+                            load_sheets_data.clear()
+                            st.success("Perfil atualizado!")
+                            st.session_state.dialog_action = None
+                            st.rerun()
+                    except Exception as e:
+                        st.error(f"Erro ao salvar: {e}")
+
     elif action == 'delete':
         # ── Confirmação de exclusão ──
         task = tasks_df[tasks_df['id'] == task_id].iloc[0]
@@ -523,7 +587,7 @@ def manage_task_dialog():
 
 
 # Exibe o diálogo se houver uma ação pendente
-if st.session_state.dialog_action in ['create', 'edit', 'delete']:
+if st.session_state.dialog_action in ['create', 'edit', 'delete', 'edit_user']:
     manage_task_dialog()
 
 
@@ -552,7 +616,7 @@ def sbadge(status):
     return f'<span class="badge b-ok">{status}</span>'
 
 
-def create_board(df, user_data, img_url, time_rem, show_menu, priorities, statuses):
+def create_board(df, user_data, img_url, time_rem, show_menu, priorities, statuses, responsibles):
     """
     Gera o HTML completo do board kanban com:
     - Barra superior (topbar) com filtros, botões e avatar do usuário
@@ -592,6 +656,7 @@ def create_board(df, user_data, img_url, time_rem, show_menu, priorities, status
     # Menu de opções (recalcular status / sair) — exibido apenas quando show_menu=True
     menu_html = f'''<div class="tb-menu" id="tbMenu">
         <div class="menu-item" onclick="sendAction(\'recalc\')">↺ Recalcular status</div>
+        <div class="menu-item" onclick="sendAction(\'edit_user\')">✎ Editar perfil</div>
         <div class="menu-item menu-danger" onclick="sendAction(\'logout\')">Sair</div>
     </div>''' if show_menu else ''
 
@@ -604,6 +669,11 @@ def create_board(df, user_data, img_url, time_rem, show_menu, priorities, status
     status_opts = '<option value="">Todos status</option>'
     for s in statuses:
         status_opts += f'<option value="{s}">{s}</option>'
+
+    # Opções do select de responsável para o filtro da topbar
+    resp_opts = '<option value="">Todos responsáveis</option>'
+    for r in responsibles:
+        resp_opts += f'<option value="{str(r).lower()}">{r}</option>'
 
     def render(task_list):
         """
@@ -639,7 +709,8 @@ def create_board(df, user_data, img_url, time_rem, show_menu, priorities, status
   data-priority="{prio_val}"
   data-stat="{stat_val}"
   data-title="{title_val.lower()}"
-  data-desc="{desc_val.lower()}">
+  data-desc="{desc_val.lower()}"
+  data-responsible="{name.lower()}">
   <div class="card-acts">
     <button class="act" onclick="event.stopPropagation();sendAction('edit',{tid})" title="Editar">
       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4z"/></svg>
@@ -855,6 +926,9 @@ html,body{{height:100%;overflow:hidden;background:#fff;}}
     <select class="tb-select" id="filterStatus" onchange="applyFilters()">
       {status_opts}
     </select>
+    <select class="tb-select" id="filterResponsible" onchange="applyFilters()">
+      {resp_opts}
+    </select>
     <button class="tb-clear" id="btnClear" title="Limpar filtros" onclick="clearFilters()">✕</button>
   </div>
 
@@ -930,25 +1004,28 @@ function move(id, status) {{
  * Atualiza contadores e barras de progresso de cada coluna.
  */
 function applyFilters() {{
-  const search   = (document.getElementById('filterSearch').value   || '').toLowerCase().trim();
-  const priority = (document.getElementById('filterPriority').value || '').toLowerCase().trim();
-  const status   = (document.getElementById('filterStatus').value   || '').toLowerCase().trim();
+  const search      = (document.getElementById('filterSearch').value      || '').toLowerCase().trim();
+  const priority    = (document.getElementById('filterPriority').value    || '').toLowerCase().trim();
+  const status      = (document.getElementById('filterStatus').value      || '').toLowerCase().trim();
+  const responsible = (document.getElementById('filterResponsible').value || '').toLowerCase().trim();
 
-  const hasFilter = search || priority || status;
+  const hasFilter = search || priority || status || responsible;
 
   // Exibe/oculta botão de limpar filtros e aplica classe 'active' nos inputs
   document.getElementById('btnClear').classList.toggle('visible', hasFilter);
   document.getElementById('filterSearch').classList.toggle('active', !!search);
   document.getElementById('filterPriority').classList.toggle('active', !!priority);
   document.getElementById('filterStatus').classList.toggle('active', !!status);
+  document.getElementById('filterResponsible').classList.toggle('active', !!responsible);
 
   // Filtra cada card individualmente
   const cards = document.querySelectorAll('.card');
   cards.forEach(card => {{
-    const titleMatch  = !search   || card.dataset.title.includes(search) || card.dataset.desc.includes(search);
-    const prioMatch   = !priority || card.dataset.priority.toLowerCase() === priority;
-    const statusMatch = !status   || card.dataset.stat.toLowerCase()     === status;
-    card.classList.toggle('hidden', !(titleMatch && prioMatch && statusMatch));
+    const titleMatch  = !search      || card.dataset.title.includes(search) || card.dataset.desc.includes(search);
+    const prioMatch   = !priority    || card.dataset.priority.toLowerCase() === priority;
+    const statusMatch = !status      || card.dataset.stat.toLowerCase()     === status;
+    const respMatch   = !responsible || card.dataset.responsible.toLowerCase() === responsible;
+    card.classList.toggle('hidden', !(titleMatch && prioMatch && statusMatch && respMatch));
   }});
 
   // Atualiza contadores e barras de progresso por coluna
@@ -967,9 +1044,10 @@ function applyFilters() {{
  * clearFilters — limpa todos os campos de filtro e reaplica (mostra tudo).
  */
 function clearFilters() {{
-  document.getElementById('filterSearch').value   = '';
-  document.getElementById('filterPriority').value = '';
-  document.getElementById('filterStatus').value   = '';
+  document.getElementById('filterSearch').value      = '';
+  document.getElementById('filterPriority').value    = '';
+  document.getElementById('filterStatus').value      = '';
+  document.getElementById('filterResponsible').value = '';
   applyFilters();
 }}
 
@@ -1021,7 +1099,7 @@ document.querySelectorAll('.drop-zone').forEach(zone => {{
 components.html(
     create_board(
         filtered_df, user, image_url, time_remaining,
-        st.session_state.show_menu, all_priorities, all_statuses
+        st.session_state.show_menu, all_priorities, all_statuses, users_list
     ),
     height=None, scrolling=False
 )
