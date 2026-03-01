@@ -204,16 +204,11 @@ def update_sheet(task_data, action='update'):
 # Oculta elementos padrão do Streamlit e posiciona botões invisíveis no DOM
 # (os botões ficam fora da tela mas ainda clicáveis via JavaScript)
 # CSS para esconder o menu, o rodapé e o cabeçalho
-hide_st_style = """
-            <style>
-            #MainMenu {visibility: hidden;}
-            footer {visibility: hidden;}
-            header {visibility: hidden;}
-            </style>
-            """
-st.markdown(hide_st_style, unsafe_allow_html=True)
 st.markdown("""
 <style>
+#MainMenu {visibility: hidden;}
+footer {visibility: hidden;}
+header {visibility: hidden;}
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 * { font-family: 'Inter', sans-serif !important; }
 
