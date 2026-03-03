@@ -20,7 +20,7 @@ def send_task_created_email(task_row):
 
     try:
         api_key      = st.secrets["BREVO_API_KEY"]
-        from_name    = st.secrets.get("EMAIL_FROM_NAME", "PMJA Sistema")
+        from_name    = st.secrets.get("EMAIL_FROM_NAME", "PMJA - Kanban")
         from_address = st.secrets["EMAIL_FROM_ADDRESS"]
     except Exception as e:
         st.warning(f"Secrets não configurados: {e}"); return
@@ -89,7 +89,7 @@ def send_task_done_email(task_row):
 
     try:
         api_key      = st.secrets["BREVO_API_KEY"]
-        from_name    = st.secrets.get("EMAIL_FROM_NAME", "PMJA Sistema")
+        from_name    = st.secrets.get("EMAIL_FROM_NAME", "PMJA - Kanban")
         from_address = st.secrets["EMAIL_FROM_ADDRESS"]
     except Exception as e:
         st.warning(f"Secrets não configurados: {e}"); return
@@ -196,17 +196,30 @@ conn = st.connection("gsheets",type=GSheetsConnection)
 def calc_status(d):
     try:
         dl = datetime.strptime(d,'%d/%m/%Y').date()
-        t  = now_brt().date()  # ← horário de Brasília
+        t  = now_brt().date()
         return "Atrasada" if dl<t else "Curto Prazo" if dl<=t+timedelta(days=3) else "Em dia"
     except: return "Em dia"
 
 def recalc():
     try:
-        df = conn.read(worksheet="tasks",ttl=0)
-        if not df.empty and 'deadline' in df.columns:
-            df['status'] = df['deadline'].apply(calc_status)
-            conn.update(worksheet="tasks",data=df); return True
-    except Exception as e: st.error(e)
+        df = conn.read(worksheet="tasks", ttl=0)
+        if df.empty: return True
+        for i in df.index:
+            row_num = i + 2
+            resp_id = df.loc[i, 'responsible_id'] if 'responsible_id' in df.columns else ''
+            user_id = df.loc[i, 'user_id'] if 'user_id' in df.columns else ''
+            formulas = make_formulas(row_num, resp_id, user_id)
+            df.loc[i, 'responsible']       = formulas['responsible']
+            df.loc[i, 'url_responsible']   = formulas['url_responsible']
+            df.loc[i, 'email_responsible'] = formulas['email_responsible']
+            df.loc[i, 'user_full_name']    = formulas['user_full_name']
+            df.loc[i, 'user_email']        = formulas['user_email']
+            df.loc[i, 'user_image']        = formulas['user_image']
+            df.loc[i, 'status']            = formulas['status']
+        conn.update(worksheet="tasks", data=df)
+        return True
+    except Exception as e:
+        st.error(e)
     return False
 
 @st.cache_data(ttl=600)
@@ -222,19 +235,107 @@ def load_data():
 
 users_df,config_df,tasks_df,users_list,prio_list = load_data()
 
+
+# ── FÓRMULAS DINÂMICAS POR LINHA ──
+# Estrutura colunas tasks:
+# A=id, B=title, C=description, D=responsible_id, E=responsible, F=priority,
+# G=deadline, H=status, I=url_responsible, J=email_responsible,
+# K=created, L=user, M=my_task, N=user_id, O=user_full_name, P=user_email,
+# Q=user_image, R=updated_at
+
+def make_formulas(row_num, responsible_id, user_id):
+    """
+    Gera as fórmulas PROCX dinâmicas (PT-BR) para uma linha específica da planilha.
+    responsible_id → lookup em users_auth para preencher responsible, url_responsible, email_responsible
+    user_id        → lookup em users_auth para preencher user_full_name, user_email, user_image
+    """
+    # Colunas users_auth: A=id, B=username, C=password, D=email, E=full_name, F=image_url
+    formulas = {
+        # Responsável: nome completo (col E de users_auth)
+        'responsible':       f'=SEERRO(PROCX(D{row_num};users_auth!A:A;users_auth!E:E;"");"")' ,
+        # URL foto responsável (col F de users_auth)
+        'url_responsible':   f'=SEERRO(PROCX(D{row_num};users_auth!A:A;users_auth!K:K;"");"")' ,
+        # Email responsável (col D de users_auth)
+        'email_responsible': f'=SEERRO(PROCX(D{row_num};users_auth!A:A;users_auth!C:C;"");"")' ,
+        # Nome completo do autor (col E de users_auth)
+        'user_full_name':    f'=SEERRO(PROCX(N{row_num};users_auth!A:A;users_auth!E:E;"");"")' ,
+        # Email do autor (col D de users_auth)
+        'user_email':        f'=SEERRO(PROCX(N{row_num};users_auth!A:A;users_auth!C:C;"");"")' ,
+        # Foto do autor (col F de users_auth)
+        'user_image':        f'=SEERRO(PROCX(N{row_num};users_auth!A:A;users_auth!K:K;"");"")' ,
+        # Status calculado pela data limite (col G)
+        'status':            f'=SE(G{row_num}="";"";SE(G{row_num}<HOJE();"Atrasada";SE(G{row_num}<=HOJE()+3;"Curto Prazo";"Em dia")))',
+    }
+    return formulas
+
+
 def update_sheet(td, action):
     try:
-        df = conn.read(worksheet="tasks",ttl=0)
-        if action=='create':
-            td['id'] = 1 if df.empty else int(df['id'].max())+1
-            df = pd.concat([df,pd.DataFrame([td])],ignore_index=True)
-        elif action=='update':
-            i = df[df['id']==td['id']].index[0]
-            for k,v in td.items(): df.loc[i,k]=v
-        elif action=='delete':
-            df = df[df['id']!=td['id']]
-        conn.update(worksheet="tasks",data=df); load_data.clear(); return True
-    except Exception as e: st.error(e); return False
+        df = conn.read(worksheet="tasks", ttl=0)
+
+        if action == 'create':
+            # Novo ID
+            td['id'] = 1 if df.empty else int(df['id'].max()) + 1
+            new_row_num = len(df) + 2  # +2: 1 header + próxima linha
+
+            # Salva responsible_id e user_id como valores fixos
+            # As demais colunas de lookup ficam como fórmulas
+            formulas = make_formulas(new_row_num, td.get('responsible_id',''), td.get('user_id',''))
+
+            # Monta a linha completa seguindo a ordem das colunas:
+            # id | title | description | responsible_id | responsible | priority | deadline |
+            # status | url_responsible | email_responsible | created | user | my_task |
+            # user_id | user_full_name | user_email | user_image | updated_at
+            new_td = {
+                'id':                 td['id'],
+                'title':              td['title'],
+                'description':        td.get('description', ''),
+                'responsible_id':     td.get('responsible_id', ''),
+                'responsible':        formulas['responsible'],
+                'priority':           td['priority'],
+                'deadline':           td['deadline'],
+                'status':             formulas['status'],
+                'url_responsible':    formulas['url_responsible'],
+                'email_responsible':  formulas['email_responsible'],
+                'created':            td['created'],
+                'user':               td.get('user', ''),
+                'my_task':            td.get('my_task', 'A Fazer'),
+                'user_id':            td.get('user_id', ''),
+                'user_full_name':     formulas['user_full_name'],
+                'user_email':         formulas['user_email'],
+                'user_image':         formulas['user_image'],
+                'updated_at':         td['updated_at'],
+            }
+            df = pd.concat([df, pd.DataFrame([new_td])], ignore_index=True)
+
+        elif action == 'update':
+            i = df[df['id'] == td['id']].index[0]
+            row_num = i + 2  # +2: 1 header + índice base 0
+
+            formulas = make_formulas(row_num, td.get('responsible_id', df.loc[i, 'responsible_id']), df.loc[i, 'user_id'])
+
+            # Atualiza apenas os campos que podem mudar numa edição
+            df.loc[i, 'title']             = td['title']
+            df.loc[i, 'description']       = td.get('description', '')
+            df.loc[i, 'responsible_id']    = td.get('responsible_id', df.loc[i, 'responsible_id'])
+            df.loc[i, 'responsible']       = formulas['responsible']
+            df.loc[i, 'priority']          = td['priority']
+            df.loc[i, 'deadline']          = td['deadline']
+            df.loc[i, 'status']            = formulas['status']
+            df.loc[i, 'url_responsible']   = formulas['url_responsible']
+            df.loc[i, 'email_responsible'] = formulas['email_responsible']
+            df.loc[i, 'updated_at']        = td['updated_at']
+
+        elif action == 'delete':
+            df = df[df['id'] != td['id']]
+
+        conn.update(worksheet="tasks", data=df)
+        load_data.clear()
+        return True
+    except Exception as e:
+        st.error(e)
+        return False
+
 
 # ── STREAMLIT HIDE CSS ──
 st.markdown("""<style>
@@ -262,6 +363,8 @@ div[data-testid="stDialog"] .stButton>button[kind="primary"]{background:#1d4ed8!
 div[data-testid="stDialog"] [data-testid="stHorizontalBlock"]{height:auto!important;overflow:visible!important;gap:8px!important}
 </style>""",unsafe_allow_html=True)
 
+#KANBAN
+#PMJA - Kanban
 # ── STATE ──
 for k,v in [('dialog_action',None),('dialog_task_id',None),('show_menu',False)]:
     st.session_state.setdefault(k,v)
@@ -290,17 +393,20 @@ elif act=="delete" and tid:
     qclear_rerun(dialog_action="delete",dialog_task_id=int(tid))
 elif act=="move" and tid and tst:
     try:
-        df2=conn.read(worksheet="tasks",ttl=0); m=df2['id']==int(tid)
+        df2 = conn.read(worksheet="tasks", ttl=0)
+        m = df2['id'] == int(tid)
         if m.any():
-            idx2=df2[m].index[0]
-            old_status=df2.loc[idx2,'my_task']
-            df2.loc[idx2,'my_task']=tst
-            df2.loc[idx2,'updated_at']=now_brt().strftime('%d/%m/%Y %H:%M:%S')  # ← BRT
-            conn.update(worksheet="tasks",data=df2); load_data.clear()
+            idx2 = df2[m].index[0]
+            old_status = df2.loc[idx2, 'my_task']
+            df2.loc[idx2, 'my_task'] = tst
+            df2.loc[idx2, 'updated_at'] = now_brt().strftime('%d/%m/%Y %H:%M:%S')
+            conn.update(worksheet="tasks", data=df2)
+            load_data.clear()
             # Envia email se acabou de ser finalizada
-            if tst=='Finalizada' and old_status!='Finalizada':
+            if tst == 'Finalizada' and old_status != 'Finalizada':
                 send_task_done_email(df2.loc[idx2].to_dict())
-    except Exception as e: st.error(e)
+    except Exception as e:
+        st.error(e)
     st.query_params.clear(); st.rerun()
 
 user = st.session_state.user_data
@@ -343,35 +449,59 @@ def dialog():
             pi = prio_list.index(task['priority']) if not is_new and task.get('priority') in prio_list else 0
             with c1: resp = st.selectbox("Responsável *", users_list, index=ri)
             with c2: prio = st.selectbox("Prioridade", prio_list, index=pi)
-            dl_val = datetime.strptime(task['deadline'],'%d/%m/%Y').date() if not is_new else now_brt().date()  # ← BRT
+            dl_val = datetime.strptime(task['deadline'],'%d/%m/%Y').date() if not is_new else now_brt().date()
             dl = st.date_input("Data Limite", value=dl_val, format="DD/MM/YYYY")
+
             if is_new:
                 if st.form_submit_button("Criar",type="primary"):
                     if title and resp:
-                        ur=users_df[users_df['full_name']==resp].iloc[0]
-                        ts_now = now_brt().strftime('%d/%m/%Y %H:%M:%S')  # ← BRT
-                        td={'title':title,'description':desc,'responsible':resp,'priority':prio,
-                            'deadline':dl.strftime('%d/%m/%Y'),'status':calc_status(dl.strftime('%d/%m/%Y')),
-                            'url_responsible':ur.get('image_url',''),'email_responsible':ur.get('email',''),
-                            'created':ts_now,'updated_at':ts_now,  # ← BRT
-                            'user':user.get('full_name',''),'user_id':user.get('id',''),
-                            'user_full_name':user.get('full_name',''),'user_email':user.get('email',''),
-                            'user_image':user.get('image_url',''),'my_task':'A Fazer'}
-                        if update_sheet(td,'create'):
+                        ur = users_df[users_df['full_name']==resp].iloc[0]
+                        ts_now = now_brt().strftime('%d/%m/%Y %H:%M:%S')
+                        td = {
+                            'title':           title,
+                            'description':     desc,
+                            'responsible_id':  int(ur.get('id', '')),
+                            'priority':        prio,
+                            'deadline':        dl.strftime('%d/%m/%Y'),
+                            'created':         ts_now,
+                            'updated_at':      ts_now,
+                            'user':            user.get('full_name',''),
+                            'user_id':         user.get('id',''),
+                            'my_task':         'A Fazer',
+                            # campos abaixo são preenchidos no update_sheet via fórmulas,
+                            # mas precisam estar no dict para o email (usam valores diretos)
+                            'responsible':     resp,
+                            'url_responsible': str(ur.get('image_url','')),
+                            'email_responsible': str(ur.get('email','')),
+                            'user_full_name':  user.get('full_name',''),
+                            'user_email':      user.get('email',''),
+                            'user_image':      user.get('image_url',''),
+                        }
+                        if update_sheet(td, 'create'):
                             send_task_created_email(td)
                             done("Criada!")
-                    else: st.error("Preencha os campos obrigatórios")
+                    else:
+                        st.error("Preencha os campos obrigatórios")
             else:
                 b1,b2=st.columns(2)
                 with b1: save=st.form_submit_button("Salvar",type="primary",use_container_width=True)
                 with b2: cancel=st.form_submit_button("Cancelar",use_container_width=True)
                 if cancel: done()
                 if save and title and resp:
-                    ur=users_df[users_df['full_name']==resp].iloc[0]
-                    td={'id':tid2,'title':title,'description':desc,'responsible':resp,'priority':prio,
-                        'deadline':dl.strftime('%d/%m/%Y'),'status':calc_status(dl.strftime('%d/%m/%Y')),
-                        'url_responsible':ur.get('image_url',''),'email_responsible':ur.get('email',''),
-                        'updated_at':now_brt().strftime('%d/%m/%Y %H:%M:%S')}  # ← BRT
+                    ur = users_df[users_df['full_name']==resp].iloc[0]
+                    td = {
+                        'id':              tid2,
+                        'title':           title,
+                        'description':     desc,
+                        'responsible_id':  int(ur.get('id', '')),
+                        'priority':        prio,
+                        'deadline':        dl.strftime('%d/%m/%Y'),
+                        'updated_at':      now_brt().strftime('%d/%m/%Y %H:%M:%S'),
+                        # para email
+                        'responsible':     resp,
+                        'url_responsible': str(ur.get('image_url','')),
+                        'email_responsible': str(ur.get('email','')),
+                    }
                     update_sheet(td,'update') and done("Atualizado!")
 
     elif a=='edit_user':
@@ -574,7 +704,7 @@ html,body{{height:100%;overflow:hidden;background:#fff}}
 <div class="topbar">
   <img class="tbl" src="https://companieslogo.com/img/orig/AZ2.F-d26946db.png?t=1720244490" alt="AZ">
   <span class="tbsp">·</span><span class="tbt">PMJA</span>
-  <span class="tbsp" style="margin:0 2px;">·</span><span class="tbs">SCRUM Gestão de Materiais</span>
+  <span class="tbsp" style="margin:0 2px;">·</span><span class="tbs">KANBAN Gestão de Materiais</span>
   <div class="tbf">
     <div class="tsr">
       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
