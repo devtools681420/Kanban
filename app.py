@@ -1,8 +1,9 @@
 import streamlit as st
 import pandas as pd
 from streamlit_gsheets import GSheetsConnection
+from streamlit_cookies_controller import CookieController
 from datetime import datetime, timedelta
-import hashlib, random, string, requests, json, time
+import hashlib, random, string, requests, json, time, uuid
 from streamlit.components.v1 import html as _html
 
 st.set_page_config(
@@ -11,34 +12,60 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# ── SESSION (st.session_state puro, sem pickle/arquivo) ──────────────
+# ── COOKIE SESSION ────────────────────────────────────────────────────
+_cc = CookieController()
+COOKIE_NAME          = "pmja_session"
 SESSION_EXPIRY_HOURS = 2
 
 def save_session(user_id, username, expiry_hours=SESSION_EXPIRY_HOURS):
+    expiry = datetime.now() + timedelta(hours=expiry_hours)
+    _cc.set(COOKIE_NAME, {
+        "user_id":  str(user_id),
+        "username": username,
+        "expiry":   expiry.isoformat(),
+        "token":    str(uuid.uuid4()),
+    })
     st.session_state.logged_in   = True
-    st.session_state.session_uid = user_id
+    st.session_state.session_uid = str(user_id)
     st.session_state.session_usr = username
-    st.session_state.session_exp = datetime.now() + timedelta(hours=expiry_hours)
+    st.session_state.session_exp = expiry
 
 def load_session():
-    if not st.session_state.get("logged_in"):
-        return None
-    exp = st.session_state.get("session_exp")
-    if not exp or datetime.now() >= exp:
+    # 1) session_state ainda ativo (mesma aba sem recarregar)
+    if st.session_state.get("logged_in") and st.session_state.get("session_exp"):
+        if datetime.now() < st.session_state.session_exp:
+            return {
+                "user_id":  st.session_state.session_uid,
+                "username": st.session_state.session_usr,
+            }
         clear_session()
         return None
-    return {
-        "user_id":  st.session_state.session_uid,
-        "username": st.session_state.session_usr,
-        "expiry":   exp,
-    }
+    # 2) cookie do browser (após F5 ou nova aba no mesmo browser)
+    try:
+        c = _cc.get(COOKIE_NAME)
+        if not c:
+            return None
+        expiry = datetime.fromisoformat(c["expiry"])
+        if datetime.now() >= expiry:
+            _cc.remove(COOKIE_NAME)
+            return None
+        st.session_state.logged_in   = True
+        st.session_state.session_uid = c["user_id"]
+        st.session_state.session_usr = c["username"]
+        st.session_state.session_exp = expiry
+        return {"user_id": c["user_id"], "username": c["username"]}
+    except Exception:
+        return None
 
 def clear_session():
-    st.session_state.logged_in   = False
-    st.session_state.user_data   = None
-    st.session_state.session_uid = None
-    st.session_state.session_usr = None
-    st.session_state.session_exp = None
+    try:
+        _cc.remove(COOKIE_NAME)
+    except Exception:
+        pass
+    st.session_state.update(
+        logged_in=False, user_data=None,
+        session_uid=None, session_usr=None, session_exp=None,
+    )
 
 # ── EMAIL ─────────────────────────────────────────────────────────────
 try:
@@ -109,8 +136,9 @@ def init_users_sheet():
         return pd.DataFrame(columns=COLS)
 
 def get_user_by_id(uid):
-    df = init_users_sheet()
-    u = df[df["id"] == uid]
+    df  = init_users_sheet()
+    uid = str(uid)
+    u   = df[df["id"].astype(str) == uid]
     return u.iloc[0].to_dict() if not u.empty else None
 
 def login_user(username, password):
@@ -152,7 +180,7 @@ def register_user(username, email, password, full_name, image_url=""):
 
 def resend_verification_code(username):
     df = init_users_sheet()
-    u = df[df["username"] == username]
+    u  = df[df["username"] == username]
     if u.empty:
         return False, "Usuário não encontrado"
     code   = generate_code()
@@ -168,7 +196,7 @@ def resend_verification_code(username):
 
 def verify_email_code(username, code):
     df = init_users_sheet()
-    u = df[df["username"] == username]
+    u  = df[df["username"] == username]
     if u.empty:
         return False, "Usuário não encontrado"
     stored = str(u.iloc[0]["verification_code"]).strip().replace(" ", "").replace(".0", "")
@@ -210,7 +238,7 @@ if not st.session_state.logged_in:
             st.session_state.user_data = ud
             st.switch_page("pages/atual.py")
 
-# ── process pending action BEFORE rendering ───────────────────────────
+# ── process pending action ────────────────────────────────────────────
 action = st.session_state.pop("_action", None) if "_action" in st.session_state else None
 
 if action == "go_register":
@@ -229,7 +257,7 @@ elif action == "logout":
 elif action == "extend":
     user = st.session_state.user_data
     if user:
-        save_session(user["id"], user["username"], 2)
+        save_session(user["id"], user["username"], SESSION_EXPIRY_HOURS)
         st.session_state.msg      = "Sessão estendida por 2 horas"
         st.session_state.msg_type = "success"
 
@@ -259,7 +287,6 @@ div.block-container>div[data-testid="stVerticalBlock"]{
   width:100%!important;display:flex!important;flex-direction:column!important;
   align-items:center!important;justify-content:center!important;gap:0!important
 }
-
 div[data-testid="stHorizontalBlock"]{
   width:100%!important;display:flex!important;
   justify-content:center!important;align-items:flex-start!important;gap:0!important
@@ -268,7 +295,6 @@ div[data-testid="stHorizontalBlock"]>div[data-testid="stColumn"]:first-child,
 div[data-testid="stHorizontalBlock"]>div[data-testid="stColumn"]:last-child{
   flex:1 1 0!important;min-width:0!important;padding:0!important
 }
-
 div[data-testid="stHorizontalBlock"]>div[data-testid="stColumn"]:nth-child(2){
   flex:0 0 min(460px,calc(100vw - 24px))!important;
   width:min(460px,calc(100vw - 24px))!important;
@@ -277,98 +303,31 @@ div[data-testid="stHorizontalBlock"]>div[data-testid="stColumn"]:nth-child(2){
   border-radius:20px!important;overflow:hidden!important;
   box-shadow:0 0 0 1px rgba(0,0,0,.06),0 4px 6px rgba(0,0,0,.05),0 24px 60px rgba(0,0,0,.14)!important
 }
-div[data-testid="stHorizontalBlock"]>div[data-testid="stColumn"]:nth-child(2)>div[data-testid="stVerticalBlock"]{
-  gap:0!important
-}
-
-div[data-testid="stHorizontalBlock"]>div[data-testid="stColumn"]:nth-child(2)>div[data-testid="stVerticalBlock"]>div{
-  padding-left:28px!important;padding-right:28px!important
-}
-div[data-testid="stHorizontalBlock"]>div[data-testid="stColumn"]:nth-child(2)>div[data-testid="stVerticalBlock"]>div:first-child{
-  padding-left:0!important;padding-right:0!important
-}
-div[data-testid="stHorizontalBlock"]>div[data-testid="stColumn"]:nth-child(2)>div[data-testid="stVerticalBlock"]>div:nth-child(2){
-  padding-top:22px!important;padding-bottom:4px!important
-}
-div[data-testid="stHorizontalBlock"]>div[data-testid="stColumn"]:nth-child(2)>div[data-testid="stVerticalBlock"]>div:last-child{
-  padding-bottom:28px!important
-}
-
-div[data-testid="stForm"]{
-  border:none!important;padding:0!important;background:transparent!important;
-  border-radius:0!important
-}
-div[data-testid="stForm"]>div>div[data-testid="stVerticalBlock"]{
-  gap:0!important;padding:0!important
-}
-
+div[data-testid="stHorizontalBlock"]>div[data-testid="stColumn"]:nth-child(2)>div[data-testid="stVerticalBlock"]{gap:0!important}
+div[data-testid="stHorizontalBlock"]>div[data-testid="stColumn"]:nth-child(2)>div[data-testid="stVerticalBlock"]>div{padding-left:28px!important;padding-right:28px!important}
+div[data-testid="stHorizontalBlock"]>div[data-testid="stColumn"]:nth-child(2)>div[data-testid="stVerticalBlock"]>div:first-child{padding-left:0!important;padding-right:0!important}
+div[data-testid="stHorizontalBlock"]>div[data-testid="stColumn"]:nth-child(2)>div[data-testid="stVerticalBlock"]>div:nth-child(2){padding-top:22px!important;padding-bottom:4px!important}
+div[data-testid="stHorizontalBlock"]>div[data-testid="stColumn"]:nth-child(2)>div[data-testid="stVerticalBlock"]>div:last-child{padding-bottom:28px!important}
+div[data-testid="stForm"]{border:none!important;padding:0!important;background:transparent!important;border-radius:0!important}
+div[data-testid="stForm"]>div>div[data-testid="stVerticalBlock"]{gap:0!important;padding:0!important}
 div[data-testid="stTextInput"] label{display:block!important;margin-bottom:6px!important}
-div[data-testid="stTextInput"] label p{
-  font-size:12px!important;font-weight:600!important;color:#64748b!important;
-  letter-spacing:.025em!important;margin:0!important;line-height:1!important
-}
-
-div[data-testid="stTextInput"]>div>div>input{
-  height:44px!important;background:#f8fafc!important;
-  border:1.5px solid #e2e8f0!important;border-radius:12px!important;
-  padding:0 14px!important;font-size:14px!important;color:#0f172a!important;
-  width:100%!important;outline:none!important;box-shadow:none!important;
-  transition:border-color .15s,box-shadow .15s,background .15s!important
-}
+div[data-testid="stTextInput"] label p{font-size:12px!important;font-weight:600!important;color:#64748b!important;letter-spacing:.025em!important;margin:0!important;line-height:1!important}
+div[data-testid="stTextInput"]>div>div>input{height:44px!important;background:#f8fafc!important;border:1.5px solid #e2e8f0!important;border-radius:12px!important;padding:0 14px!important;font-size:14px!important;color:#0f172a!important;width:100%!important;outline:none!important;box-shadow:none!important;transition:border-color .15s,box-shadow .15s,background .15s!important}
 div[data-testid="stTextInput"]>div>div>input::placeholder{color:#c8d3dd!important;font-size:13.5px!important}
-div[data-testid="stTextInput"]>div>div>input:focus{
-  border-color:#0075be!important;background:#ffffff!important;
-  box-shadow:0 0 0 3px rgba(0,117,190,.13)!important
-}
+div[data-testid="stTextInput"]>div>div>input:focus{border-color:#0075be!important;background:#ffffff!important;box-shadow:0 0 0 3px rgba(0,117,190,.13)!important}
 div[data-testid="InputInstructions"]{display:none!important}
-
 div[data-testid="stTextInput"]{margin-top:14px!important;margin-bottom:0!important}
 div[data-testid="stFormSubmitButton"]{margin-top:22px!important}
-
-div[data-testid="stButton"]>button,
-div[data-testid="stFormSubmitButton"]>button{
-  font-size:14px!important;font-weight:600!important;height:46px!important;
-  border-radius:12px!important;width:100%!important;cursor:pointer!important;
-  transition:all .18s!important;letter-spacing:.01em!important
-}
-div[data-testid="stFormSubmitButton"]>button[kind="primary"],
-div[data-testid="stButton"]>button[kind="primary"]{
-  background:#0075be!important;color:#ffffff!important;border:none!important;
-  box-shadow:0 1px 2px rgba(0,0,0,.08),0 4px 14px rgba(0,117,190,.28)!important
-}
-div[data-testid="stFormSubmitButton"]>button[kind="primary"]:hover,
-div[data-testid="stButton"]>button[kind="primary"]:hover{
-  background:#005fa0!important;
-  box-shadow:0 2px 4px rgba(0,0,0,.1),0 8px 20px rgba(0,117,190,.36)!important;
-  transform:translateY(-1px)!important
-}
-div[data-testid="stFormSubmitButton"]>button[kind="secondary"],
-div[data-testid="stButton"]>button[kind="secondary"]{
-  background:#ffffff!important;color:#64748b!important;
-  border:1.5px solid #e2e8f0!important;box-shadow:none!important
-}
-div[data-testid="stFormSubmitButton"]>button[kind="secondary"]:hover,
-div[data-testid="stButton"]>button[kind="secondary"]:hover{
-  background:#f8fafc!important;border-color:#0075be!important;color:#0075be!important
-}
-
-div[data-testid="stForm"]>div>div[data-testid="stVerticalBlock"]>div[data-testid="stHorizontalBlock"]{
-  gap:12px!important;width:100%!important;margin-top:14px!important;
-  padding:0!important;justify-content:flex-start!important;align-items:flex-start!important
-}
-div[data-testid="stForm"]>div>div[data-testid="stVerticalBlock"]>div[data-testid="stHorizontalBlock"]>div[data-testid="stColumn"]{
-  flex:1 1 0!important;min-width:0!important;padding:0!important
-}
-div[data-testid="stForm"]>div>div[data-testid="stVerticalBlock"]>div[data-testid="stHorizontalBlock"] div[data-testid="stTextInput"]{
-  margin-top:0!important
-}
-
+div[data-testid="stButton"]>button,div[data-testid="stFormSubmitButton"]>button{font-size:14px!important;font-weight:600!important;height:46px!important;border-radius:12px!important;width:100%!important;cursor:pointer!important;transition:all .18s!important;letter-spacing:.01em!important}
+div[data-testid="stFormSubmitButton"]>button[kind="primary"],div[data-testid="stButton"]>button[kind="primary"]{background:#0075be!important;color:#ffffff!important;border:none!important;box-shadow:0 1px 2px rgba(0,0,0,.08),0 4px 14px rgba(0,117,190,.28)!important}
+div[data-testid="stFormSubmitButton"]>button[kind="primary"]:hover,div[data-testid="stButton"]>button[kind="primary"]:hover{background:#005fa0!important;box-shadow:0 2px 4px rgba(0,0,0,.1),0 8px 20px rgba(0,117,190,.36)!important;transform:translateY(-1px)!important}
+div[data-testid="stFormSubmitButton"]>button[kind="secondary"],div[data-testid="stButton"]>button[kind="secondary"]{background:#ffffff!important;color:#64748b!important;border:1.5px solid #e2e8f0!important;box-shadow:none!important}
+div[data-testid="stFormSubmitButton"]>button[kind="secondary"]:hover,div[data-testid="stButton"]>button[kind="secondary"]:hover{background:#f8fafc!important;border-color:#0075be!important;color:#0075be!important}
+div[data-testid="stForm"]>div>div[data-testid="stVerticalBlock"]>div[data-testid="stHorizontalBlock"]{gap:12px!important;width:100%!important;margin-top:14px!important;padding:0!important;justify-content:flex-start!important;align-items:flex-start!important}
+div[data-testid="stForm"]>div>div[data-testid="stVerticalBlock"]>div[data-testid="stHorizontalBlock"]>div[data-testid="stColumn"]{flex:1 1 0!important;min-width:0!important;padding:0!important}
+div[data-testid="stForm"]>div>div[data-testid="stVerticalBlock"]>div[data-testid="stHorizontalBlock"] div[data-testid="stTextInput"]{margin-top:0!important}
 div[data-testid="stButton"]{margin:0!important}
-
-div[data-testid="stAlert"]{
-  font-size:13px!important;border-radius:12px!important;
-  margin-bottom:16px!important;margin-top:4px!important
-}
+div[data-testid="stAlert"]{font-size:13px!important;border-radius:12px!important;margin-bottom:16px!important;margin-top:4px!important}
 </style>
 """
 _html(_CSS, height=0)
@@ -398,19 +357,14 @@ photo = PHOTOS.get(pg, PHOTOS["login"])
 
 def flush():
     m, t = st.session_state.msg, st.session_state.msg_type
-    st.session_state.msg = ""
+    st.session_state.msg      = ""
     st.session_state.msg_type = ""
     if not m:
         return
     {"error": st.error, "success": st.success}.get(t, st.info)(m)
 
-
 def sp(px):
-    st.markdown(
-        "<div style='height:" + str(px) + "px;line-height:0;font-size:0;'></div>",
-        unsafe_allow_html=True,
-    )
-
+    st.markdown(f"<div style='height:{px}px;line-height:0;font-size:0;'></div>", unsafe_allow_html=True)
 
 def divider():
     st.markdown(
@@ -431,27 +385,20 @@ with card:
 
     # BANNER
     st.markdown(
-        "<div style='position:relative;width:100%;height:196px;overflow:hidden;'>"
-        "<img src='" + photo + "' style='position:absolute;inset:0;width:100%;height:100%;"
+        f"<div style='position:relative;width:100%;height:196px;overflow:hidden;'>"
+        f"<img src='{photo}' style='position:absolute;inset:0;width:100%;height:100%;"
         "object-fit:cover;object-position:center 40%;filter:brightness(.55) saturate(1.2);'>"
-        "<div style='position:absolute;inset:0;"
-        "background:linear-gradient(180deg,transparent 20%,rgba(15,23,42,.72) 100%);'></div>"
+        "<div style='position:absolute;inset:0;background:linear-gradient(180deg,transparent 20%,rgba(15,23,42,.72) 100%);'></div>"
         "<div style='position:absolute;bottom:0;left:0;right:0;padding:0 28px 22px;'>"
-        "<div style='font-size:9px;font-weight:700;letter-spacing:.22em;"
-        "color:rgba(255,255,255,.42);text-transform:uppercase;margin-bottom:7px;line-height:1;'>"
-        "PMJA · UHE Jaguara · Rifaina SP</div>"
-        "<div style='font-size:23px;font-weight:700;color:#fff;line-height:1.2;"
-        "letter-spacing:-.2px;text-shadow:0 2px 10px rgba(0,0,0,.3);'>"
-        + banner_title +
-        "</div></div></div>",
+        "<div style='font-size:9px;font-weight:700;letter-spacing:.22em;color:rgba(255,255,255,.42);text-transform:uppercase;margin-bottom:7px;line-height:1;'>PMJA · UHE Jaguara · Rifaina SP</div>"
+        f"<div style='font-size:23px;font-weight:700;color:#fff;line-height:1.2;letter-spacing:-.2px;text-shadow:0 2px 10px rgba(0,0,0,.3);'>{banner_title}</div>"
+        "</div></div>",
         unsafe_allow_html=True,
     )
 
     # SECTION LABEL
     st.markdown(
-        "<div style='font-size:9px;font-weight:700;letter-spacing:.22em;"
-        "text-transform:uppercase;color:#0075be;line-height:1;'>"
-        + form_label + "</div>",
+        f"<div style='font-size:9px;font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:#0075be;line-height:1;'>{form_label}</div>",
         unsafe_allow_html=True,
     )
 
@@ -512,15 +459,11 @@ with card:
             st.text_input("Nome completo", placeholder="Seu nome completo", key="rg_n")
             st.text_input("Email", placeholder="seu@email.com", key="rg_e")
             c1, c2 = st.columns(2)
-            with c1:
-                st.text_input("Usuário", placeholder="nome_usuario", key="rg_u")
-            with c2:
-                st.text_input("URL da foto", placeholder="https://...", key="rg_i")
+            with c1: st.text_input("Usuário", placeholder="nome_usuario", key="rg_u")
+            with c2: st.text_input("URL da foto", placeholder="https://...", key="rg_i")
             c3, c4 = st.columns(2)
-            with c3:
-                st.text_input("Senha", placeholder="Mín. 6 caracteres", type="password", key="rg_p")
-            with c4:
-                st.text_input("Confirmar senha", placeholder="Repita a senha", type="password", key="rg_p2")
+            with c3: st.text_input("Senha", placeholder="Mín. 6 caracteres", type="password", key="rg_p")
+            with c4: st.text_input("Confirmar senha", placeholder="Repita a senha", type="password", key="rg_p2")
             sub = st.form_submit_button("Cadastrar →", type="primary", use_container_width=True)
 
         if sub:
@@ -579,10 +522,8 @@ with card:
             st.text_input("Código de 6 dígitos", placeholder="000000", max_chars=6, key="vf_c")
             sp(8)
             cv1, cv2 = st.columns(2)
-            with cv1:
-                confirm = st.form_submit_button("Confirmar", type="primary", use_container_width=True)
-            with cv2:
-                go_back = st.form_submit_button("← Voltar", use_container_width=True)
+            with cv1: confirm = st.form_submit_button("Confirmar", type="primary", use_container_width=True)
+            with cv2: go_back = st.form_submit_button("← Voltar", use_container_width=True)
 
         if confirm:
             ok, msg = verify_email_code(st.session_state.temp_username, st.session_state.vf_c)
@@ -615,15 +556,12 @@ with card:
 
         st.markdown(
             "<div style='display:flex;align-items:center;gap:14px;"
-            "background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:14px;"
-            "padding:14px 16px;margin-bottom:18px;'>"
+            "background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:14px;padding:14px 16px;margin-bottom:18px;'>"
             "<div style='width:44px;height:44px;border-radius:50%;flex-shrink:0;"
-            "background:linear-gradient(135deg,#0075be,#38bdf8);display:flex;"
-            "align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:18px;"
-            "box-shadow:0 2px 8px rgba(0,117,190,.3);'>" + initial + "</div>"
-            "<div><div style='font-size:14px;font-weight:600;color:#0f172a;'>" + uname + "</div>"
-            "<div style='font-size:12px;color:#64748b;margin-top:3px;'>" + uemail + "</div>"
-            "</div></div>",
+            "background:linear-gradient(135deg,#0075be,#38bdf8);display:flex;align-items:center;justify-content:center;"
+            f"color:#fff;font-weight:700;font-size:18px;box-shadow:0 2px 8px rgba(0,117,190,.3);'>{initial}</div>"
+            f"<div><div style='font-size:14px;font-weight:600;color:#0f172a;'>{uname}</div>"
+            f"<div style='font-size:12px;color:#64748b;margin-top:3px;'>{uemail}</div></div></div>",
             unsafe_allow_html=True,
         )
 
@@ -647,8 +585,7 @@ with card:
 
     # FOOTER
     st.markdown(
-        "<div style='text-align:center;padding-top:12px;"
-        "font-size:10px;color:#94a3b8;letter-spacing:.1em;'>"
+        "<div style='text-align:center;padding-top:12px;font-size:10px;color:#94a3b8;letter-spacing:.1em;'>"
         "PMJA · UHE Jaguara · Rifaina SP</div>",
         unsafe_allow_html=True,
     )
