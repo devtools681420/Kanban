@@ -216,7 +216,9 @@ def recalc():
             formulas = make_formulas(row_num, resp_id, user_id)
             for k, val in formulas.items():
                 df.loc[i, k] = val
+          
         conn.update(worksheet="tasks", data=df)
+        load_data.clear()
         return True
     except Exception as e:
         st.error(e)
@@ -360,7 +362,25 @@ elif act == "move" and tid and tst:
         st.error(e)
     st.query_params.clear(); st.rerun()
 
-user    = st.session_state.user_data
+if not st.session_state.get("user_data"):
+    uid = st.session_state.get("session_uid")
+    if uid and not users_df.empty:
+        m = users_df['id'].astype(str).str.split('.').str[0] == str(uid).split('.')[0]
+        if m.any():
+            row = users_df[m].iloc[0]
+            st.session_state.user_data = {
+                "id":        row.get("id", ""),
+                "username":  row.get("username", st.session_state.get("session_usr", "")),
+                "full_name": row.get("full_name", ""),
+                "email":     row.get("email", ""),
+                "image_url": row.get("image_url", ""),
+            }
+        else:
+            clear_session(); st.switch_page("app.py")
+    else:
+        clear_session(); st.switch_page("app.py")
+
+user = st.session_state.user_data
 img_url = user.get('image_url', '')
 mins    = session_mins()
 
@@ -513,7 +533,7 @@ def build_board(df, u, img, mins, show_menu, prios, stats, resps):
           else f'<div style="width:22px;height:22px;border-radius:50%;background:#1d4ed8;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;">{u["full_name"][0].upper()}</div>')
     timer = f'<span style="font-size:9px;color:#9ca3af;margin-left:3px;">⏱{mins}m</span>' if mins else ''
     menu  = (f'<div class="tb-menu">'
-             f'<div class="menu-item" onclick="sa(\'recalc\')">↺ Recalcular status</div>'
+             f'<div class="menu-item" onclick="sa(\'recalc\')">↺ Atualizar</div>'
              f'<div class="menu-item" onclick="sa(\'edit_user\')">✎ Editar perfil</div>'
              f'<div class="menu-item menu-danger" onclick="sa(\'logout\')">Sair</div>'
              f'</div>') if show_menu else ''
