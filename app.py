@@ -31,15 +31,27 @@ SESSION_FILE = Path(".streamlit/session.pkl")
 def save_session(user_id, username, expiry_hours=2):
     expiry = datetime.now() + timedelta(hours=expiry_hours)
     SESSION_FILE.parent.mkdir(exist_ok=True)
+    
+    try:
+        machine = socket.gethostname()
+    except Exception as e:
+        machine = "unknown"
+        st.warning(f"Erro ao obter hostname: {e}")
+    
+    st.write(f"DEBUG machine: {machine}")  # ← aparece na tela
+    
+    data = {
+        "user_id":  user_id,
+        "username": username,
+        "expiry":   expiry,
+        "machine":  machine,
+    }
+    st.write(f"DEBUG data: {data}")  # ← mostra o que vai ser salvo
+    
     with open(SESSION_FILE, "wb") as f:
-        pickle.dump({
-            "user_id":  user_id,
-            "username": username,
-            "expiry":   expiry,
-            "machine":  socket.gethostname(),   # ← novo campo
-        }, f)
+        pickle.dump(data, f)
+    
     st.session_state.logged_in = True
-    print(socket.gethostname() )
 
 def load_session():
     if not SESSION_FILE.exists():
@@ -53,7 +65,8 @@ def load_session():
             return None
         # Máquina diferente → apaga e força novo login
         saved_machine = s.get("machine", "")
-        if saved_machine and saved_machine != socket.gethostname():
+        current_machine = socket.gethostname()
+        if saved_machine and saved_machine != current_machine:
             SESSION_FILE.unlink()
             return None
         return s
