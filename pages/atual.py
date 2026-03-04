@@ -8,6 +8,39 @@ import streamlit.components.v1 as components
 def now_brt():
     return datetime.now(ZoneInfo("America/Sao_Paulo"))
 
+# ── SESSION (st.session_state puro, sem pickle/arquivo) ──────────────
+SESSION_EXPIRY_HOURS = 2
+
+def save_session(user_id, username, expiry_hours=SESSION_EXPIRY_HOURS):
+    st.session_state.logged_in   = True
+    st.session_state.session_uid = user_id
+    st.session_state.session_usr = username
+    st.session_state.session_exp = datetime.now() + timedelta(hours=expiry_hours)
+
+def load_session():
+    if not st.session_state.get("logged_in"):
+        return None
+    exp = st.session_state.get("session_exp")
+    if not exp or datetime.now() >= exp:
+        clear_session()
+        return None
+    return {
+        "user_id":  st.session_state.get("session_uid"),
+        "username": st.session_state.get("session_usr"),
+        "expiry":   exp,
+    }
+
+def clear_session():
+    st.session_state.update(
+        logged_in=False, user_data=None,
+        session_uid=None, session_usr=None, session_exp=None
+    )
+
+def session_mins():
+    exp = st.session_state.get("session_exp")
+    if exp:
+        return max(0, int((exp - datetime.now()).total_seconds() // 60))
+    return 0
 
 # ── EMAIL: TAREFA CRIADA (para o responsável) ──
 def send_task_created_email(task_row):
@@ -144,64 +177,35 @@ def send_task_done_email(task_row):
         st.warning(f"Falha ao enviar email: {e}")
 
 
-def load_session():
-    if not st.session_state.get("logged_in"):
-        return None
-    exp = st.session_state.get("session_exp")
-    if not exp or datetime.now() >= exp:
-        clear_session()
-        return None
-    return {
-        "user_id":  st.session_state.get("session_uid"),
-        "username": st.session_state.get("session_usr"),
-        "expiry":   exp,
-    }
-
-def clear_session():
-    st.session_state.update(
-        logged_in=False, user_data=None,
-        session_uid=None, session_usr=None, session_exp=None
-    )
-
-def session_mins():
-    exp = st.session_state.get("session_exp")
-    if exp:
-        return max(0, int((exp - datetime.now()).total_seconds() // 60))
-    return 0
-
-def save_session(user_id, username, expiry_hours=2):
-    st.session_state.session_uid = user_id
-    st.session_state.session_usr = username
-    st.session_state.session_exp = datetime.now() + timedelta(hours=expiry_hours)
-    st.session_state.logged_in   = True
-
 # ── AUTH ──
-if not st.session_state.get('logged_in') or not load_session():
-    st.set_page_config(layout="centered", initial_sidebar_state="collapsed")
-    st.error("⚠️ Faça login primeiro!")
-    if st.button("← Login", key="go_back"):
-        clear_session()
-        st.switch_page("app.py")
-    st.stop()
+if not st.session_state.get("logged_in"):
+    s = load_session()
+    if not s:
+        st.set_page_config(layout="centered", initial_sidebar_state="collapsed")
+        st.error("⚠️ Faça login primeiro!")
+        if st.button("← Login", key="go_back"):
+            st.switch_page("app.py")
+        st.stop()
 
-st.set_page_config(layout="wide",initial_sidebar_state="collapsed")
-conn = st.connection("gsheets",type=GSheetsConnection)
+st.set_page_config(layout="wide", initial_sidebar_state="collapsed")
+conn = st.connection("gsheets", type=GSheetsConnection)
 
 def calc_status(d):
     try:
-        dl = datetime.strptime(d,'%d/%m/%Y').date()
+        dl = datetime.strptime(d, '%d/%m/%Y').date()
         t  = now_brt().date()
-        return "Atrasada" if dl<t else "Curto Prazo" if dl<=t+timedelta(days=3) else "Em dia"
-    except: return "Em dia"
+        return "Atrasada" if dl < t else "Curto Prazo" if dl <= t + timedelta(days=3) else "Em dia"
+    except:
+        return "Em dia"
 
 def recalc():
     try:
         df = conn.read(worksheet="tasks", ttl=0)
         if df.empty: return True
         for i in df.index:
-            row_num = i + 2
-            resp_id = df.loc[i, 'responsible_id'] if 'responsible_id' in df.columns else ''
-            user_id = df.loc[i, 'user_id'] if 'user_id' in df.columns else ''
+            row_num  = i + 2
+            resp_id  = df.loc[i, 'responsible_id'] if 'responsible_id' in df.columns else ''
+            user_id  = df.loc[i, 'user_id'] if 'user_id' in df.columns else ''
             formulas = make_formulas(row_num, resp_id, user_id)
             df.loc[i, 'responsible']       = formulas['responsible']
             df.loc[i, 'url_responsible']   = formulas['url_responsible']
@@ -219,45 +223,27 @@ def recalc():
 @st.cache_data(ttl=600)
 def load_data():
     try:
-        u = conn.read(worksheet="users_auth",ttl=600)
-        c = conn.read(worksheet="config",usecols=list(range(2)),ttl=600)
-        t = conn.read(worksheet="tasks",ttl=600)
-        if not t.empty and 'deadline' in t.columns: t['status']=t['deadline'].apply(calc_status)
+        u = conn.read(worksheet="users_auth", ttl=600)
+        c = conn.read(worksheet="config", usecols=list(range(2)), ttl=600)
+        t = conn.read(worksheet="tasks", ttl=600)
+        if not t.empty and 'deadline' in t.columns:
+            t['status'] = t['deadline'].apply(calc_status)
         return u, c, t, (u['full_name'].tolist() if not u.empty else []), (c['priority'].tolist() if not c.empty else [])
     except Exception as e:
-        st.error(e); return pd.DataFrame(),pd.DataFrame(),pd.DataFrame(),[],[]
+        st.error(e); return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), [], []
 
-users_df,config_df,tasks_df,users_list,prio_list = load_data()
+users_df, config_df, tasks_df, users_list, prio_list = load_data()
 
 
 # ── FÓRMULAS DINÂMICAS POR LINHA ──
-# Estrutura colunas tasks:
-# A=id, B=title, C=description, D=responsible_id, E=responsible, F=priority,
-# G=deadline, H=status, I=url_responsible, J=email_responsible,
-# K=created, L=user, M=my_task, N=user_id, O=user_full_name, P=user_email,
-# Q=user_image, R=updated_at
-
 def make_formulas(row_num, responsible_id, user_id):
-    """
-    Gera as fórmulas PROCX dinâmicas (PT-BR) para uma linha específica da planilha.
-    responsible_id → lookup em users_auth para preencher responsible, url_responsible, email_responsible
-    user_id        → lookup em users_auth para preencher user_full_name, user_email, user_image
-    """
-    # Colunas users_auth: A=id, B=username, C=password, D=email, E=full_name, F=image_url
     formulas = {
-        # Responsável: nome completo (col E de users_auth)
         'responsible':       f'=SEERRO(PROCX(D{row_num};users_auth!A:A;users_auth!E:E;"");"")' ,
-        # URL foto responsável (col F de users_auth)
         'url_responsible':   f'=SEERRO(PROCX(D{row_num};users_auth!A:A;users_auth!K:K;"");"")' ,
-        # Email responsável (col D de users_auth)
         'email_responsible': f'=SEERRO(PROCX(D{row_num};users_auth!A:A;users_auth!C:C;"");"")' ,
-        # Nome completo do autor (col E de users_auth)
         'user_full_name':    f'=SEERRO(PROCX(N{row_num};users_auth!A:A;users_auth!E:E;"");"")' ,
-        # Email do autor (col D de users_auth)
         'user_email':        f'=SEERRO(PROCX(N{row_num};users_auth!A:A;users_auth!C:C;"");"")' ,
-        # Foto do autor (col F de users_auth)
         'user_image':        f'=SEERRO(PROCX(N{row_num};users_auth!A:A;users_auth!K:K;"");"")' ,
-        # Status calculado pela data limite (col G)
         'status':            f'=SE(G{row_num}="";"";SE(G{row_num}<HOJE();"Atrasada";SE(G{row_num}<=HOJE()+3;"Curto Prazo";"Em dia")))',
     }
     return formulas
@@ -268,47 +254,35 @@ def update_sheet(td, action):
         df = conn.read(worksheet="tasks", ttl=0)
 
         if action == 'create':
-            # Novo ID
             td['id'] = 1 if df.empty else int(df['id'].max()) + 1
-            new_row_num = len(df) + 2  # +2: 1 header + próxima linha
-
-            # Salva responsible_id e user_id como valores fixos
-            # As demais colunas de lookup ficam como fórmulas
-            formulas = make_formulas(new_row_num, td.get('responsible_id',''), td.get('user_id',''))
-
-            # Monta a linha completa seguindo a ordem das colunas:
-            # id | title | description | responsible_id | responsible | priority | deadline |
-            # status | url_responsible | email_responsible | created | user | my_task |
-            # user_id | user_full_name | user_email | user_image | updated_at
+            new_row_num = len(df) + 2
+            formulas = make_formulas(new_row_num, td.get('responsible_id', ''), td.get('user_id', ''))
             new_td = {
-                'id':                 td['id'],
-                'title':              td['title'],
-                'description':        td.get('description', ''),
-                'responsible_id':     td.get('responsible_id', ''),
-                'responsible':        formulas['responsible'],
-                'priority':           td['priority'],
-                'deadline':           td['deadline'],
-                'status':             formulas['status'],
-                'url_responsible':    formulas['url_responsible'],
-                'email_responsible':  formulas['email_responsible'],
-                'created':            td['created'],
-                'user':               td.get('user', ''),
-                'my_task':            td.get('my_task', 'A Fazer'),
-                'user_id':            td.get('user_id', ''),
-                'user_full_name':     formulas['user_full_name'],
-                'user_email':         formulas['user_email'],
-                'user_image':         formulas['user_image'],
-                'updated_at':         td['updated_at'],
+                'id':                td['id'],
+                'title':             td['title'],
+                'description':       td.get('description', ''),
+                'responsible_id':    td.get('responsible_id', ''),
+                'responsible':       formulas['responsible'],
+                'priority':          td['priority'],
+                'deadline':          td['deadline'],
+                'status':            formulas['status'],
+                'url_responsible':   formulas['url_responsible'],
+                'email_responsible': formulas['email_responsible'],
+                'created':           td['created'],
+                'user':              td.get('user', ''),
+                'my_task':           td.get('my_task', 'A Fazer'),
+                'user_id':           td.get('user_id', ''),
+                'user_full_name':    formulas['user_full_name'],
+                'user_email':        formulas['user_email'],
+                'user_image':        formulas['user_image'],
+                'updated_at':        td['updated_at'],
             }
             df = pd.concat([df, pd.DataFrame([new_td])], ignore_index=True)
 
         elif action == 'update':
             i = df[df['id'] == td['id']].index[0]
-            row_num = i + 2  # +2: 1 header + índice base 0
-
+            row_num  = i + 2
             formulas = make_formulas(row_num, td.get('responsible_id', df.loc[i, 'responsible_id']), df.loc[i, 'user_id'])
-
-            # Atualiza apenas os campos que podem mudar numa edição
             df.loc[i, 'title']             = td['title']
             df.loc[i, 'description']       = td.get('description', '')
             df.loc[i, 'responsible_id']    = td.get('responsible_id', df.loc[i, 'responsible_id'])
@@ -355,121 +329,116 @@ div[data-testid="stDialog"]{z-index:99999!important;position:fixed!important}
 div[data-testid="stDialog"] .stButton>button{font-size:13px!important;color:#374151!important;background:#fff!important;border:1px solid rgba(0,0,0,.12)!important;padding:6px 14px!important;height:34px!important;width:auto!important;border-radius:8px!important;cursor:pointer!important;position:relative!important;left:auto!important;top:auto!important;opacity:1!important}
 div[data-testid="stDialog"] .stButton>button[kind="primary"]{background:#1d4ed8!important;border-color:#1d4ed8!important;color:#fff!important}
 div[data-testid="stDialog"] [data-testid="stHorizontalBlock"]{height:auto!important;overflow:visible!important;gap:8px!important}
-</style>""",unsafe_allow_html=True)
+</style>""", unsafe_allow_html=True)
 
-#KANBAN
-#PMJA - Kanban
 # ── STATE ──
-for k,v in [('dialog_action',None),('dialog_task_id',None),('show_menu',False)]:
-    st.session_state.setdefault(k,v)
+for k, v in [('dialog_action', None), ('dialog_task_id', None), ('show_menu', False)]:
+    st.session_state.setdefault(k, v)
 
 # ── QUERY PARAMS → ACTIONS ──
 qp = st.query_params
-act,tid,tst = qp.get("action",""),qp.get("task_id",""),qp.get("task_status","")
+act, tid, tst = qp.get("action", ""), qp.get("task_id", ""), qp.get("task_status", "")
 
 def qclear_rerun(**kw):
     st.session_state.update(**kw); st.query_params.clear(); st.rerun()
 
-if act=="create" and st.session_state.dialog_action!="create":
-    qclear_rerun(dialog_action="create",dialog_task_id=None,show_menu=False)
-elif act=="menu":
+if act == "create" and st.session_state.dialog_action != "create":
+    qclear_rerun(dialog_action="create", dialog_task_id=None, show_menu=False)
+elif act == "menu":
     qclear_rerun(show_menu=not st.session_state.show_menu)
-elif act=="recalc":
+elif act == "recalc":
     recalc() and load_data.clear()
     qclear_rerun(show_menu=False)
-elif act=="edit_user":
-    qclear_rerun(dialog_action="edit_user",show_menu=False)
-elif act=="logout":
+elif act == "edit_user":
+    qclear_rerun(dialog_action="edit_user", show_menu=False)
+elif act == "logout":
     clear_session(); st.query_params.clear(); st.switch_page("app.py")
-elif act=="edit" and tid:
-    qclear_rerun(dialog_action="edit",dialog_task_id=int(tid))
-elif act=="delete" and tid:
-    qclear_rerun(dialog_action="delete",dialog_task_id=int(tid))
-elif act=="move" and tid and tst:
+elif act == "edit" and tid:
+    qclear_rerun(dialog_action="edit", dialog_task_id=int(tid))
+elif act == "delete" and tid:
+    qclear_rerun(dialog_action="delete", dialog_task_id=int(tid))
+elif act == "move" and tid and tst:
     try:
         df2 = conn.read(worksheet="tasks", ttl=0)
         m = df2['id'] == int(tid)
         if m.any():
-            idx2 = df2[m].index[0]
+            idx2       = df2[m].index[0]
             old_status = df2.loc[idx2, 'my_task']
-            df2.loc[idx2, 'my_task'] = tst
+            df2.loc[idx2, 'my_task']    = tst
             df2.loc[idx2, 'updated_at'] = now_brt().strftime('%d/%m/%Y %H:%M:%S')
             conn.update(worksheet="tasks", data=df2)
             load_data.clear()
-            # Envia email se acabou de ser finalizada
             if tst == 'Finalizada' and old_status != 'Finalizada':
                 send_task_done_email(df2.loc[idx2].to_dict())
     except Exception as e:
         st.error(e)
     st.query_params.clear(); st.rerun()
 
-user = st.session_state.user_data
-img_url = user.get('image_url','')
-mins = session_mins()
+user    = st.session_state.user_data
+img_url = user.get('image_url', '')
+mins    = session_mins()
 
 # ── SORT TASKS ──
 fdf = tasks_df.copy()
 if not fdf.empty:
-    fmt='%d/%m/%Y %H:%M:%S'
+    fmt = '%d/%m/%Y %H:%M:%S'
     def parse_dt(col):
-        if col not in fdf.columns: return pd.Series([pd.NaT]*len(fdf),index=fdf.index)
-        return pd.to_datetime(fdf[col].replace('',None).replace('__',None),format=fmt,errors='coerce')
-    fdf['_u']=parse_dt('updated_at'); fdf['_c']=parse_dt('created')
-    fdf['_s']=fdf['_u'].fillna(fdf['_c'])
-    fdf=fdf.sort_values('_s',ascending=False,na_position='last').drop(columns=['_u','_c','_s'],errors='ignore')
+        if col not in fdf.columns: return pd.Series([pd.NaT] * len(fdf), index=fdf.index)
+        return pd.to_datetime(fdf[col].replace('', None).replace('__', None), format=fmt, errors='coerce')
+    fdf['_u'] = parse_dt('updated_at'); fdf['_c'] = parse_dt('created')
+    fdf['_s'] = fdf['_u'].fillna(fdf['_c'])
+    fdf = fdf.sort_values('_s', ascending=False, na_position='last').drop(columns=['_u', '_c', '_s'], errors='ignore')
 
 all_prio = sorted(set(tasks_df['priority'].dropna())) if not tasks_df.empty and 'priority' in tasks_df.columns else prio_list
-all_stat = ['Atrasada','Curto Prazo','Em dia']
+all_stat = ['Atrasada', 'Curto Prazo', 'Em dia']
 
 # ── DIALOG ──
 @st.dialog("Criar / Editar Tarefa")
 def dialog():
-    a,tid2 = st.session_state.dialog_action, st.session_state.dialog_task_id
-    if a not in ['create','edit','delete','edit_user']:
-        st.session_state.dialog_action=None; st.rerun(); return
+    a, tid2 = st.session_state.dialog_action, st.session_state.dialog_task_id
+    if a not in ['create', 'edit', 'delete', 'edit_user']:
+        st.session_state.dialog_action = None; st.rerun(); return
 
     def done(msg=""):
         if msg: st.success(msg)
-        st.session_state.dialog_action=None; st.rerun()
+        st.session_state.dialog_action = None; st.rerun()
 
-    if a in ('create','edit'):
-        is_new = a=='create'
-        task = {} if is_new else tasks_df[tasks_df['id']==tid2].iloc[0].to_dict()
-        with st.form("tf",clear_on_submit=is_new):
-            title = st.text_input("Título *", value=task.get('title',''))
-            desc  = st.text_area("Descrição", value=task.get('description',''))
-            c1,c2 = st.columns(2)
+    if a in ('create', 'edit'):
+        is_new = a == 'create'
+        task   = {} if is_new else tasks_df[tasks_df['id'] == tid2].iloc[0].to_dict()
+        with st.form("tf", clear_on_submit=is_new):
+            title = st.text_input("Título *", value=task.get('title', ''))
+            desc  = st.text_area("Descrição", value=task.get('description', ''))
+            c1, c2 = st.columns(2)
             ri = users_list.index(task['responsible']) if not is_new and task.get('responsible') in users_list else 0
             pi = prio_list.index(task['priority']) if not is_new and task.get('priority') in prio_list else 0
             with c1: resp = st.selectbox("Responsável *", users_list, index=ri)
             with c2: prio = st.selectbox("Prioridade", prio_list, index=pi)
-            dl_val = datetime.strptime(task['deadline'],'%d/%m/%Y').date() if not is_new else now_brt().date()
+            dl_val = datetime.strptime(task['deadline'], '%d/%m/%Y').date() if not is_new else now_brt().date()
             dl = st.date_input("Data Limite", value=dl_val, format="DD/MM/YYYY")
 
             if is_new:
-                if st.form_submit_button("Criar",type="primary"):
+                if st.form_submit_button("Criar", type="primary"):
                     if title and resp:
-                        ur = users_df[users_df['full_name']==resp].iloc[0]
+                        ur     = users_df[users_df['full_name'] == resp].iloc[0]
                         ts_now = now_brt().strftime('%d/%m/%Y %H:%M:%S')
                         td = {
-                            'title':           title,
-                            'description':     desc,
-                            'responsible_id':  int(ur.get('id', '')),
-                            'priority':        prio,
-                            'deadline':        dl.strftime('%d/%m/%Y'),
-                            'created':         ts_now,
-                            'updated_at':      ts_now,
-                            'user':            user.get('full_name',''),
-                            'user_id':         user.get('id',''),
-                            'my_task':         'A Fazer',
-                            # campos abaixo são preenchidos no update_sheet via fórmulas,
-                            # mas precisam estar no dict para o email (usam valores diretos)
-                            'responsible':     resp,
-                            'url_responsible': str(ur.get('image_url','')),
-                            'email_responsible': str(ur.get('email','')),
-                            'user_full_name':  user.get('full_name',''),
-                            'user_email':      user.get('email',''),
-                            'user_image':      user.get('image_url',''),
+                            'title':             title,
+                            'description':       desc,
+                            'responsible_id':    int(ur.get('id', '')),
+                            'priority':          prio,
+                            'deadline':          dl.strftime('%d/%m/%Y'),
+                            'created':           ts_now,
+                            'updated_at':        ts_now,
+                            'user':              user.get('full_name', ''),
+                            'user_id':           user.get('id', ''),
+                            'my_task':           'A Fazer',
+                            'responsible':       resp,
+                            'url_responsible':   str(ur.get('image_url', '')),
+                            'email_responsible': str(ur.get('email', '')),
+                            'user_full_name':    user.get('full_name', ''),
+                            'user_email':        user.get('email', ''),
+                            'user_image':        user.get('image_url', ''),
                         }
                         if update_sheet(td, 'create'):
                             send_task_created_email(td)
@@ -477,111 +446,120 @@ def dialog():
                     else:
                         st.error("Preencha os campos obrigatórios")
             else:
-                b1,b2=st.columns(2)
-                with b1: save=st.form_submit_button("Salvar",type="primary",use_container_width=True)
-                with b2: cancel=st.form_submit_button("Cancelar",use_container_width=True)
+                b1, b2 = st.columns(2)
+                with b1: save   = st.form_submit_button("Salvar",   type="primary", use_container_width=True)
+                with b2: cancel = st.form_submit_button("Cancelar", use_container_width=True)
                 if cancel: done()
                 if save and title and resp:
-                    ur = users_df[users_df['full_name']==resp].iloc[0]
+                    ur = users_df[users_df['full_name'] == resp].iloc[0]
                     td = {
-                        'id':              tid2,
-                        'title':           title,
-                        'description':     desc,
-                        'responsible_id':  int(ur.get('id', '')),
-                        'priority':        prio,
-                        'deadline':        dl.strftime('%d/%m/%Y'),
-                        'updated_at':      now_brt().strftime('%d/%m/%Y %H:%M:%S'),
-                        # para email
-                        'responsible':     resp,
-                        'url_responsible': str(ur.get('image_url','')),
-                        'email_responsible': str(ur.get('email','')),
+                        'id':                tid2,
+                        'title':             title,
+                        'description':       desc,
+                        'responsible_id':    int(ur.get('id', '')),
+                        'priority':          prio,
+                        'deadline':          dl.strftime('%d/%m/%Y'),
+                        'updated_at':        now_brt().strftime('%d/%m/%Y %H:%M:%S'),
+                        'responsible':       resp,
+                        'url_responsible':   str(ur.get('image_url', '')),
+                        'email_responsible': str(ur.get('email', '')),
                     }
-                    update_sheet(td,'update') and done("Atualizado!")
+                    update_sheet(td, 'update') and done("Atualizado!")
 
-    elif a=='edit_user':
+    elif a == 'edit_user':
         with st.form("uf"):
-            fn  = st.text_input("Nome completo", value=user.get('full_name',''))
-            st.text_input("E-mail", value=user.get('email',''), disabled=True)
-            img = st.text_input("URL da foto", value=user.get('image_url',''))
+            fn  = st.text_input("Nome completo", value=user.get('full_name', ''))
+            st.text_input("E-mail", value=user.get('email', ''), disabled=True)
+            img = st.text_input("URL da foto", value=user.get('image_url', ''))
             if img.strip(): st.image(img.strip(), width=60)
-            pw  = st.text_input("Nova senha", type="password", placeholder="deixe vazio para manter")
+            pw  = st.text_input("Nova senha",      type="password", placeholder="deixe vazio para manter")
             pw2 = st.text_input("Confirmar senha", type="password")
-            b1,b2=st.columns(2)
-            with b1: save=st.form_submit_button("Salvar",type="primary",use_container_width=True)
-            with b2: cancel=st.form_submit_button("Cancelar",use_container_width=True)
+            b1, b2 = st.columns(2)
+            with b1: save   = st.form_submit_button("Salvar",   type="primary", use_container_width=True)
+            with b2: cancel = st.form_submit_button("Cancelar", use_container_width=True)
             if cancel: done()
             if save:
-                if pw and pw!=pw2: st.error("Senhas não coincidem.")
+                if pw and pw != pw2: st.error("Senhas não coincidem.")
                 elif not fn.strip(): st.error("Nome obrigatório.")
                 else:
                     try:
-                        df_a=conn.read(worksheet="users_auth",ttl=0); m=df_a['id']==user.get('id')
+                        conn2 = st.connection("gsheets", type=GSheetsConnection)
+                        df_a  = conn2.read(worksheet="users_auth", ttl=0)
+                        m     = df_a['id'] == user.get('id')
                         if m.any():
-                            i=df_a[m].index[0]; df_a.loc[i,'full_name']=fn.strip(); df_a.loc[i,'image_url']=img.strip()
-                            if pw: df_a.loc[i,'password']=hashlib.sha256(pw.encode()).hexdigest()
-                            conn.update(worksheet="users_auth",data=df_a)
-                            st.session_state.user_data.update(full_name=fn.strip(),image_url=img.strip())
+                            i = df_a[m].index[0]
+                            df_a.loc[i, 'full_name']  = fn.strip()
+                            df_a.loc[i, 'image_url']  = img.strip()
+                            if pw: df_a.loc[i, 'password'] = hashlib.sha256(pw.encode()).hexdigest()
+                            conn2.update(worksheet="users_auth", data=df_a)
+                            st.session_state.user_data.update(full_name=fn.strip(), image_url=img.strip())
                             load_data.clear(); done("Perfil atualizado!")
                     except Exception as e: st.error(e)
 
-    elif a=='delete':
-        task=tasks_df[tasks_df['id']==tid2].iloc[0]
+    elif a == 'delete':
+        task = tasks_df[tasks_df['id'] == tid2].iloc[0]
         st.warning(f"Excluir **{task['title']}**?"); st.caption("Esta ação não pode ser desfeita.")
-        b1,b2=st.columns(2)
+        b1, b2 = st.columns(2)
         with b1:
-            if st.button("✓ Excluir",type="primary",use_container_width=True,key="ky"):
-                update_sheet({'id':tid2},'delete') and done("Excluída!")
+            if st.button("✓ Excluir", type="primary", use_container_width=True, key="ky"):
+                update_sheet({'id': tid2}, 'delete') and done("Excluída!")
         with b2:
-            if st.button("✗ Cancelar",use_container_width=True,key="kn"): done()
+            if st.button("✗ Cancelar", use_container_width=True, key="kn"): done()
 
-if st.session_state.dialog_action in ['create','edit','delete','edit_user']:
+if st.session_state.dialog_action in ['create', 'edit', 'delete', 'edit_user']:
     dialog()
 
 # ── BADGE HELPERS ──
 def pbadge(p):
-    p=str(p).lower()
-    c="b-high" if any(x in p for x in ['alta','crítica','critica','high']) else "b-med" if any(x in p for x in ['média','media','medium','normal']) else "b-low"
+    p = str(p).lower()
+    c = "b-high" if any(x in p for x in ['alta', 'crítica', 'critica', 'high']) else \
+        "b-med"  if any(x in p for x in ['média', 'media', 'medium', 'normal']) else "b-low"
     return f'<span class="badge {c}">{p.title()}</span>'
 
 def sbadge(s):
-    c={"Atrasada":"b-late","Curto Prazo":"b-soon"}.get(s,"b-ok")
+    c = {"Atrasada": "b-late", "Curto Prazo": "b-soon"}.get(s, "b-ok")
     return f'<span class="badge {c}">{s}</span>'
 
 # ── BUILD BOARD HTML ──
-def build_board(df,u,img,mins,show_menu,prios,stats,resps):
-    tasks = df.to_dict('records') if isinstance(df,pd.DataFrame) else df
-    CM = {'A Fazer':('#1d4ed8','#dbeafe','#eff6ff'),'Em Andamento':('#059669','#d1fae5','#f0fdf4'),
-          'Paralizada':('#b45309','#fef3c7','#fffbeb'),'Finalizada':('#dc2626','#fee2e2','#fef2f2')}
-    by = {k:[t for t in tasks if t.get('my_task')==k] for k in CM}
-    tot = len(tasks); cnt={k:len(v) for k,v in by.items()}
-    pct={k:(cnt[k]/tot*100 if tot else 0) for k in cnt}
+def build_board(df, u, img, mins, show_menu, prios, stats, resps):
+    tasks = df.to_dict('records') if isinstance(df, pd.DataFrame) else df
+    CM = {
+        'A Fazer':      ('#1d4ed8', '#dbeafe', '#eff6ff'),
+        'Em Andamento': ('#059669', '#d1fae5', '#f0fdf4'),
+        'Paralizada':   ('#b45309', '#fef3c7', '#fffbeb'),
+        'Finalizada':   ('#dc2626', '#fee2e2', '#fef2f2'),
+    }
+    by  = {k: [t for t in tasks if t.get('my_task') == k] for k in CM}
+    tot = len(tasks); cnt = {k: len(v) for k, v in by.items()}
+    pct = {k: (cnt[k] / tot * 100 if tot else 0) for k in cnt}
 
-    av = f'<img src="{img}" style="width:22px;height:22px;border-radius:50%;object-fit:cover;border:1.5px solid rgba(0,0,0,.1);">' if img and img.strip() \
+    av = f'<img src="{img}" style="width:22px;height:22px;border-radius:50%;object-fit:cover;border:1.5px solid rgba(0,0,0,.1);">' \
+         if img and img.strip() \
          else f'<div style="width:22px;height:22px;border-radius:50%;background:#1d4ed8;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;">{u["full_name"][0].upper()}</div>'
     timer = f'<span style="font-size:9px;color:#9ca3af;margin-left:3px;">⏱{mins}m</span>' if mins else ''
-    menu = f'''<div class="tb-menu">
+    menu  = f'''<div class="tb-menu">
         <div class="menu-item" onclick="sa('recalc')">↺ Recalcular status</div>
         <div class="menu-item" onclick="sa('edit_user')">✎ Editar perfil</div>
         <div class="menu-item menu-danger" onclick="sa('logout')">Sair</div>
     </div>''' if show_menu else ''
 
     def opts(items, placeholder, val_fn=str):
-        return f'<option value="">{placeholder}</option>'+''.join(f'<option value="{val_fn(i)}">{i}</option>' for i in items)
+        return f'<option value="">{placeholder}</option>' + ''.join(f'<option value="{val_fn(i)}">{i}</option>' for i in items)
 
-    po = opts(prios,"Todas prioridades")
-    so = opts(stats,"Todos status")
-    ro = opts(resps,"Todos responsáveis", lambda r: str(r).lower())
+    po = opts(prios, "Todas prioridades")
+    so = opts(stats, "Todos status")
+    ro = opts(resps, "Todos responsáveis", lambda r: str(r).lower())
 
     def cards(lst):
-        h=""
+        h = ""
         for t in lst:
-            tid3=int(t['id']); desc=str(t.get('description','')or'').strip()
-            dh=f'<div class="cd">{desc}</div>' if desc else ''
-            nm=str(t.get('responsible','')or''); fn=nm.split()[0] if nm else ''
-            im=str(t.get('url_responsible','')or'').strip()
-            ava=f'<img src="{im}" onerror="this.style.display=\'none\'">' if im \
-                else f'<div class="av-fb">{"".join(w[0].upper() for w in nm.split()[:2]) or "?"}</div>'
-            h+=f'''<div class="card" draggable="true" data-id="{tid3}" data-status="{t['my_task']}"
+            tid3 = int(t['id']); desc = str(t.get('description', '') or '').strip()
+            dh   = f'<div class="cd">{desc}</div>' if desc else ''
+            nm   = str(t.get('responsible', '') or ''); fn = nm.split()[0] if nm else ''
+            im   = str(t.get('url_responsible', '') or '').strip()
+            ava  = f'<img src="{im}" onerror="this.style.display=\'none\'">' if im \
+                   else f'<div class="av-fb">{"".join(w[0].upper() for w in nm.split()[:2]) or "?"}</div>'
+            h += f'''<div class="card" draggable="true" data-id="{tid3}" data-status="{t['my_task']}"
   data-priority="{t.get('priority','')}" data-stat="{t.get('status','')}"
   data-title="{str(t.get('title','')).lower()}" data-desc="{str(t.get('description','')).lower()}"
   data-responsible="{nm.lower()}">
@@ -601,10 +579,10 @@ def build_board(df,u,img,mins,show_menu,prios,stats,resps):
 </div>'''
         return h
 
-    cols=""
-    for key,(ac,zb,hb) in CM.items():
-        slug=key.replace(' ','-')
-        cols+=f'''<div class="col" data-col="{key}">
+    cols = ""
+    for key, (ac, zb, hb) in CM.items():
+        slug  = key.replace(' ', '-')
+        cols += f'''<div class="col" data-col="{key}">
     <div class="col-hdr" style="border-top:3px solid {ac};background:{hb};" onclick="toggleCol(this)">
       <div class="chr"><span class="ct2" style="color:{ac};">{key.upper()}</span>
         <span class="cc" id="cnt-{slug}" style="background:{ac};">{cnt[key]}</span>
@@ -794,9 +772,6 @@ document.querySelectorAll('.dz').forEach(z=>{{
 </script></body></html>'''
 
 components.html(
-    build_board(fdf,user,img_url,mins,st.session_state.show_menu,all_prio,all_stat,users_list),
+    build_board(fdf, user, img_url, mins, st.session_state.show_menu, all_prio, all_stat, users_list),
     height=4000, scrolling=True
 )
-## ✅ CORRETO — rerun fora do callback
-# if st.button("← Login", key="go_back"):
-#     st.switch_page("app.py")  # ou st.rerun()

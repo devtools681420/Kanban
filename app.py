@@ -11,7 +11,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# ── SESSION (st.session_state puro, sem pickle) ────────────────────
+# ── SESSION (st.session_state puro, sem pickle/arquivo) ──────────────
 SESSION_EXPIRY_HOURS = 2
 
 def save_session(user_id, username, expiry_hours=SESSION_EXPIRY_HOURS):
@@ -40,12 +40,7 @@ def clear_session():
     st.session_state.session_usr = None
     st.session_state.session_exp = None
 
-def session_mins():
-    exp = st.session_state.get("session_exp")
-    if exp:
-        return max(0, int((exp - datetime.now()).total_seconds() // 60))
-    return 0
-
+# ── EMAIL ─────────────────────────────────────────────────────────────
 try:
     BREVO_API_KEY      = st.secrets.get("BREVO_API_KEY", "")
     EMAIL_FROM_NAME    = st.secrets.get("EMAIL_FROM_NAME", "PMJA Sistema")
@@ -191,20 +186,21 @@ def verify_email_code(username, code):
 
 # ── session state ─────────────────────────────────────────────────────
 for k, v in [
-    ("logged_in",   False),
-    ("user_data",   None),
-    ("page",        "login"),
+    ("logged_in",     False),
+    ("user_data",     None),
+    ("page",          "login"),
     ("temp_username", None),
-    ("msg",         ""),
-    ("msg_type",    ""),
-    ("_action",     None),
-    ("session_uid", None),
-    ("session_usr", None),
-    ("session_exp", None),
+    ("msg",           ""),
+    ("msg_type",      ""),
+    ("_action",       None),
+    ("session_uid",   None),
+    ("session_usr",   None),
+    ("session_exp",   None),
 ]:
     if k not in st.session_state:
         st.session_state[k] = v
 
+# ── verifica sessão ativa ─────────────────────────────────────────────
 if not st.session_state.logged_in:
     s = load_session()
     if s:
@@ -213,13 +209,8 @@ if not st.session_state.logged_in:
             st.session_state.logged_in = True
             st.session_state.user_data = ud
             st.switch_page("pages/atual.py")
-    else:
-        # Garante que os campos de sessão sejam limpos se não há sessão válida
-        for _k in ("session_uid", "session_usr", "session_exp"):
-            if _k not in st.session_state:
-                st.session_state[_k] = None
 
-# ── process pending action BEFORE rendering (top of script = safe) ────
+# ── process pending action BEFORE rendering ───────────────────────────
 action = st.session_state.pop("_action", None) if "_action" in st.session_state else None
 
 if action == "go_register":
@@ -242,9 +233,7 @@ elif action == "extend":
         st.session_state.msg      = "Sessão estendida por 2 horas"
         st.session_state.msg_type = "success"
 
-# ─────────────────────────────────────────────────────────────────────
-# CSS — injected via zero-height iframe to avoid st.markdown escaping
-# ─────────────────────────────────────────────────────────────────────
+# ── CSS ───────────────────────────────────────────────────────────────
 _CSS = """\
 <style>
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap');
@@ -271,7 +260,6 @@ div.block-container>div[data-testid="stVerticalBlock"]{
   align-items:center!important;justify-content:center!important;gap:0!important
 }
 
-/* outer columns */
 div[data-testid="stHorizontalBlock"]{
   width:100%!important;display:flex!important;
   justify-content:center!important;align-items:flex-start!important;gap:0!important
@@ -281,7 +269,6 @@ div[data-testid="stHorizontalBlock"]>div[data-testid="stColumn"]:last-child{
   flex:1 1 0!important;min-width:0!important;padding:0!important
 }
 
-/* CARD */
 div[data-testid="stHorizontalBlock"]>div[data-testid="stColumn"]:nth-child(2){
   flex:0 0 min(460px,calc(100vw - 24px))!important;
   width:min(460px,calc(100vw - 24px))!important;
@@ -294,7 +281,6 @@ div[data-testid="stHorizontalBlock"]>div[data-testid="stColumn"]:nth-child(2)>di
   gap:0!important
 }
 
-/* card children: horizontal padding except banner */
 div[data-testid="stHorizontalBlock"]>div[data-testid="stColumn"]:nth-child(2)>div[data-testid="stVerticalBlock"]>div{
   padding-left:28px!important;padding-right:28px!important
 }
@@ -308,7 +294,6 @@ div[data-testid="stHorizontalBlock"]>div[data-testid="stColumn"]:nth-child(2)>di
   padding-bottom:28px!important
 }
 
-/* FORM — no border, no background, rounded */
 div[data-testid="stForm"]{
   border:none!important;padding:0!important;background:transparent!important;
   border-radius:0!important
@@ -317,14 +302,12 @@ div[data-testid="stForm"]>div>div[data-testid="stVerticalBlock"]{
   gap:0!important;padding:0!important
 }
 
-/* INPUT labels */
 div[data-testid="stTextInput"] label{display:block!important;margin-bottom:6px!important}
 div[data-testid="stTextInput"] label p{
   font-size:12px!important;font-weight:600!important;color:#64748b!important;
   letter-spacing:.025em!important;margin:0!important;line-height:1!important
 }
 
-/* INPUT box */
 div[data-testid="stTextInput"]>div>div>input{
   height:44px!important;background:#f8fafc!important;
   border:1.5px solid #e2e8f0!important;border-radius:12px!important;
@@ -339,13 +322,9 @@ div[data-testid="stTextInput"]>div>div>input:focus{
 }
 div[data-testid="InputInstructions"]{display:none!important}
 
-/* field spacing */
 div[data-testid="stTextInput"]{margin-top:14px!important;margin-bottom:0!important}
-
-/* form submit spacing */
 div[data-testid="stFormSubmitButton"]{margin-top:22px!important}
 
-/* BUTTONS */
 div[data-testid="stButton"]>button,
 div[data-testid="stFormSubmitButton"]>button{
   font-size:14px!important;font-weight:600!important;height:46px!important;
@@ -373,7 +352,6 @@ div[data-testid="stButton"]>button[kind="secondary"]:hover{
   background:#f8fafc!important;border-color:#0075be!important;color:#0075be!important
 }
 
-/* 2-col grids inside forms */
 div[data-testid="stForm"]>div>div[data-testid="stVerticalBlock"]>div[data-testid="stHorizontalBlock"]{
   gap:12px!important;width:100%!important;margin-top:14px!important;
   padding:0!important;justify-content:flex-start!important;align-items:flex-start!important
@@ -489,7 +467,6 @@ with card:
             st.text_input("Senha", placeholder="••••••••", type="password", key="li_p")
             sub = st.form_submit_button("Entrar →", type="primary", use_container_width=True)
 
-        # Process OUTSIDE form context — no rerun-in-callback
         if sub:
             u = st.session_state.li_u.strip()
             p = st.session_state.li_p
@@ -502,7 +479,7 @@ with card:
                 if ok:
                     st.session_state.logged_in = True
                     st.session_state.user_data = result
-                    save_session(result["id"], u, 2)
+                    save_session(result["id"], u, SESSION_EXPIRY_HOURS)
                     st.switch_page("pages/atual.py")
                 elif result == "EMAIL_NOT_VERIFIED":
                     resend_verification_code(u)
@@ -518,7 +495,6 @@ with card:
 
         divider()
 
-        # Use session flag instead of rerun-in-callback
         if st.button("Criar nova conta →", use_container_width=True, key="go_reg"):
             st.session_state.page = "register"
             st.session_state.msg  = ""
@@ -658,7 +634,7 @@ with card:
         d1, d2 = st.columns(2)
         with d1:
             if st.button("🔄 Estender Sessão", use_container_width=True, key="extend"):
-                save_session(user["id"], user["username"], 2)
+                save_session(user["id"], user["username"], SESSION_EXPIRY_HOURS)
                 st.session_state.msg      = "Sessão estendida por 2 horas"
                 st.session_state.msg_type = "success"
                 st.rerun()
