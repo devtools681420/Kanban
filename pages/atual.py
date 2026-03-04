@@ -4,7 +4,9 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 import streamlit.components.v1 as components
+import socket
 
+#def load_session(
 SF = Path(".streamlit/session.pkl")
 
 # ── TIMEZONE BRASÍLIA ──
@@ -148,12 +150,21 @@ def send_task_done_email(task_row):
 
 
 def load_session():
-    if not SF.exists(): return None
+    if not SF.exists():
+        return None
     try:
-        s = pickle.load(open(SF,'rb'))
-        if datetime.now() < s['expiry']: return s
-        SF.unlink()
-    except: pass
+        s = pickle.load(open(SF, 'rb'))
+        if datetime.now() >= s['expiry']:
+            SF.unlink()
+            return None
+        saved_machine = s.get("machine", "")
+        if saved_machine and saved_machine != socket.gethostname():
+            SF.unlink()
+            return None
+        return s
+    except:
+        pass
+    return None
 
 def clear_session():
     SF.exists() and SF.unlink()

@@ -5,7 +5,21 @@ from datetime import datetime, timedelta
 import hashlib, random, string, requests, json, time, pickle
 from pathlib import Path
 from streamlit.components.v1 import html as _html
+import socket
 
+def obter_nome_maquina():
+    try:
+        hostname = socket.gethostname()
+        return hostname
+    except Exception as e:
+        return f"Erro: {e}"
+
+# Exemplo de uso
+nome = obter_nome_maquina()
+print(f"Nome da máquina: {nome}")
+
+#def load_session()
+#def save_session
 st.set_page_config(
     page_title="PMJA Scrum",
     layout="wide",
@@ -18,8 +32,14 @@ def save_session(user_id, username, expiry_hours=2):
     expiry = datetime.now() + timedelta(hours=expiry_hours)
     SESSION_FILE.parent.mkdir(exist_ok=True)
     with open(SESSION_FILE, "wb") as f:
-        pickle.dump({"user_id": user_id, "username": username, "expiry": expiry}, f)
+        pickle.dump({
+            "user_id":  user_id,
+            "username": username,
+            "expiry":   expiry,
+            "machine":  socket.gethostname(),   # ← novo campo
+        }, f)
     st.session_state.logged_in = True
+    print(socket.gethostname() )
 
 def load_session():
     if not SESSION_FILE.exists():
@@ -27,9 +47,16 @@ def load_session():
     try:
         with open(SESSION_FILE, "rb") as f:
             s = pickle.load(f)
-        if datetime.now() < s["expiry"]:
-            return s
-        SESSION_FILE.unlink()
+        # Sessão expirada → apaga
+        if datetime.now() >= s["expiry"]:
+            SESSION_FILE.unlink()
+            return None
+        # Máquina diferente → apaga e força novo login
+        saved_machine = s.get("machine", "")
+        if saved_machine and saved_machine != socket.gethostname():
+            SESSION_FILE.unlink()
+            return None
+        return s
     except Exception:
         pass
     return None
