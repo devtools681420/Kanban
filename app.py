@@ -2,83 +2,49 @@ import streamlit as st
 import pandas as pd
 from streamlit_gsheets import GSheetsConnection
 from datetime import datetime, timedelta
-import hashlib, random, string, requests, json, time, pickle
-from pathlib import Path
+import hashlib, random, string, requests, json, time
 from streamlit.components.v1 import html as _html
-import socket
 
-def obter_nome_maquina():
-    try:
-        hostname = socket.gethostname()
-        return hostname
-    except Exception as e:
-        return f"Erro: {e}"
-
-# Exemplo de uso
-nome = obter_nome_maquina()
-print(f"Nome da máquina: {nome}")
-
-#def load_session()
-#def save_session
 st.set_page_config(
     page_title="PMJA Scrum",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
 
-SESSION_FILE = Path(".streamlit/session.pkl")
+# ── SESSION (st.session_state puro, sem pickle) ────────────────────
+SESSION_EXPIRY_HOURS = 2
 
-def save_session(user_id, username, expiry_hours=2):
-    expiry = datetime.now() + timedelta(hours=expiry_hours)
-    SESSION_FILE.parent.mkdir(exist_ok=True)
-    
-    try:
-        machine = socket.gethostname()
-    except Exception as e:
-        machine = "unknown"
-        st.warning(f"Erro ao obter hostname: {e}")
-    
-    st.write(f"DEBUG machine: {machine}")  # ← aparece na tela
-    
-    data = {
-        "user_id":  user_id,
-        "username": username,
-        "expiry":   expiry,
-        "machine":  machine,
-    }
-    st.write(f"DEBUG data: {data}")  # ← mostra o que vai ser salvo
-    
-    with open(SESSION_FILE, "wb") as f:
-        pickle.dump(data, f)
-    
-    st.session_state.logged_in = True
+def save_session(user_id, username, expiry_hours=SESSION_EXPIRY_HOURS):
+    st.session_state.logged_in   = True
+    st.session_state.session_uid = user_id
+    st.session_state.session_usr = username
+    st.session_state.session_exp = datetime.now() + timedelta(hours=expiry_hours)
 
 def load_session():
-    if not SESSION_FILE.exists():
+    if not st.session_state.get("logged_in"):
         return None
-    try:
-        with open(SESSION_FILE, "rb") as f:
-            s = pickle.load(f)
-        # Sessão expirada → apaga
-        if datetime.now() >= s["expiry"]:
-            SESSION_FILE.unlink()
-            return None
-        # Máquina diferente → apaga e força novo login
-        saved_machine = s.get("machine", "")
-        current_machine = socket.gethostname()
-        if saved_machine and saved_machine != current_machine:
-            SESSION_FILE.unlink()
-            return None
-        return s
-    except Exception:
-        pass
-    return None
+    exp = st.session_state.get("session_exp")
+    if not exp or datetime.now() >= exp:
+        clear_session()
+        return None
+    return {
+        "user_id":  st.session_state.session_uid,
+        "username": st.session_state.session_usr,
+        "expiry":   exp,
+    }
 
 def clear_session():
-    if SESSION_FILE.exists():
-        SESSION_FILE.unlink()
-    st.session_state.logged_in = False
-    st.session_state.user_data = None
+    st.session_state.logged_in   = False
+    st.session_state.user_data   = None
+    st.session_state.session_uid = None
+    st.session_state.session_usr = None
+    st.session_state.session_exp = None
+
+def session_mins():
+    exp = st.session_state.get("session_exp")
+    if exp:
+        return max(0, int((exp - datetime.now()).total_seconds() // 60))
+    return 0
 
 try:
     BREVO_API_KEY      = st.secrets.get("BREVO_API_KEY", "")
@@ -225,9 +191,16 @@ def verify_email_code(username, code):
 
 # ── session state ─────────────────────────────────────────────────────
 for k, v in [
-    ("logged_in", False), ("user_data", None), ("page", "login"),
-    ("temp_username", None), ("msg", ""), ("msg_type", ""),
-    ("_action", None),  # pending action flag — avoids rerun-in-callback
+    ("logged_in",   False),
+    ("user_data",   None),
+    ("page",        "login"),
+    ("temp_username", None),
+    ("msg",         ""),
+    ("msg_type",    ""),
+    ("_action",     None),
+    ("session_uid", None),
+    ("session_usr", None),
+    ("session_exp", None),
 ]:
     if k not in st.session_state:
         st.session_state[k] = v
@@ -240,6 +213,11 @@ if not st.session_state.logged_in:
             st.session_state.logged_in = True
             st.session_state.user_data = ud
             st.switch_page("pages/atual.py")
+    else:
+        # Garante que os campos de sessão sejam limpos se não há sessão válida
+        for _k in ("session_uid", "session_usr", "session_exp"):
+            if _k not in st.session_state:
+                st.session_state[_k] = None
 
 # ── process pending action BEFORE rendering (top of script = safe) ────
 action = st.session_state.pop("_action", None) if "_action" in st.session_state else None

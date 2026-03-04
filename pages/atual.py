@@ -1,13 +1,8 @@
-import streamlit as st, pandas as pd, pickle, hashlib, requests
+import streamlit as st, pandas as pd, hashlib, requests
 from streamlit_gsheets import GSheetsConnection
 from datetime import datetime, timedelta
-from pathlib import Path
 from zoneinfo import ZoneInfo
 import streamlit.components.v1 as components
-import socket
-
-#def load_session(
-SF = Path(".streamlit/session.pkl")
 
 # ── TIMEZONE BRASÍLIA ──
 def now_brt():
@@ -150,60 +145,44 @@ def send_task_done_email(task_row):
 
 
 def load_session():
-    if not SF.exists():
+    if not st.session_state.get("logged_in"):
         return None
-    try:
-        s = pickle.load(open(SF, 'rb'))
-        if datetime.now() >= s['expiry']:
-            SF.unlink()
-            return None
-        saved_machine = s.get("machine", "")
-        if saved_machine and saved_machine != socket.gethostname():
-            SF.unlink()
-            return None
-        return s
-    except:
-        pass
-    return None
+    exp = st.session_state.get("session_exp")
+    if not exp or datetime.now() >= exp:
+        clear_session()
+        return None
+    return {
+        "user_id":  st.session_state.get("session_uid"),
+        "username": st.session_state.get("session_usr"),
+        "expiry":   exp,
+    }
 
 def clear_session():
-    SF.exists() and SF.unlink()
-    st.session_state.update(logged_in=False, user_data=None)
-
-def get_user(uid):
-    try:
-        df = st.connection("gsheets",type=GSheetsConnection).read(worksheet="users_auth",ttl=0)
-        r = df[df['id']==uid]
-        return r.iloc[0].to_dict() if not r.empty else None
-    except: return None
+    st.session_state.update(
+        logged_in=False, user_data=None,
+        session_uid=None, session_usr=None, session_exp=None
+    )
 
 def session_mins():
-    try:
-        s = load_session()
-        if s: return max(0,int((s['expiry']-datetime.now()).total_seconds()//60))
-    except: pass
+    exp = st.session_state.get("session_exp")
+    if exp:
+        return max(0, int((exp - datetime.now()).total_seconds() // 60))
     return 0
 
+def save_session(user_id, username, expiry_hours=2):
+    st.session_state.session_uid = user_id
+    st.session_state.session_usr = username
+    st.session_state.session_exp = datetime.now() + timedelta(hours=expiry_hours)
+    st.session_state.logged_in   = True
+
 # ── AUTH ──
-if not st.session_state.get('logged_in'):
-    s = load_session()
-    if s:
-        ud = get_user(s['user_id'])
-        if ud: st.session_state.update(logged_in=True, user_data=ud)
-        else:
-            st.set_page_config(layout="centered",initial_sidebar_state="collapsed")
-            st.error("⚠️ Sessão inválida.")
-            #st.button("← Login",type="primary",on_click=lambda:(clear_session(),st.switch_page("app.py")))
-            if st.button("← Login", key="go_back"):
-                st.switch_page("app.py")
-            st.stop()
-    else:
-        st.set_page_config(layout="centered",initial_sidebar_state="collapsed")
-        st.error("⚠️ Faça login primeiro!")
-        #st.button("← Login",type="primary",on_click=lambda: st.switch_page("app.py"))
-        if st.button("← Login", key="go_back"):
-            st.switch_page("app.py")
-        st.stop()
+if not st.session_state.get('logged_in') or not load_session():
+    st.set_page_config(layout="centered", initial_sidebar_state="collapsed")
+    st.error("⚠️ Faça login primeiro!")
+    if st.button("← Login", key="go_back"):
+        clear_session()
+        st.switch_page("app.py")
+    st.stop()
 
 st.set_page_config(layout="wide",initial_sidebar_state="collapsed")
 conn = st.connection("gsheets",type=GSheetsConnection)
