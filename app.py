@@ -1,54 +1,36 @@
-# INSTRUÇÕES:
-# 1. Substitua o conteúdo completo do seu app.py por este arquivo
-# 2. Renomeie o arquivo para app.py
-# 3. Execute: streamlit run app.py
-
 import streamlit as st
 import pandas as pd
 from streamlit_gsheets import GSheetsConnection
 from datetime import datetime, timedelta
-import hashlib
-import random
-import string
-import requests
-import json
-import time
-import pickle
+import hashlib, random, string, requests, json, time, pickle
 from pathlib import Path
-import streamlit.components.v1 as components
+from streamlit.components.v1 import html as _html
 
-# ==================== CONFIGURAÇÕES ====================
 st.set_page_config(
     page_title="PMJA Scrum",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
 
-# ==================== SESSÃO COM ARQUIVO ====================
 SESSION_FILE = Path(".streamlit/session.pkl")
 
 def save_session(user_id, username, expiry_hours=2):
     expiry = datetime.now() + timedelta(hours=expiry_hours)
-    session = {
-        'user_id': user_id,
-        'username': username,
-        'expiry': expiry
-    }
     SESSION_FILE.parent.mkdir(exist_ok=True)
-    with open(SESSION_FILE, 'wb') as f:
-        pickle.dump(session, f)
+    with open(SESSION_FILE, "wb") as f:
+        pickle.dump({"user_id": user_id, "username": username, "expiry": expiry}, f)
     st.session_state.logged_in = True
 
 def load_session():
     if not SESSION_FILE.exists():
         return None
     try:
-        with open(SESSION_FILE, 'rb') as f:
-            session = pickle.load(f)
-        if datetime.now() < session['expiry']:
-            return session
+        with open(SESSION_FILE, "rb") as f:
+            s = pickle.load(f)
+        if datetime.now() < s["expiry"]:
+            return s
         SESSION_FILE.unlink()
-    except:
+    except Exception:
         pass
     return None
 
@@ -58,496 +40,621 @@ def clear_session():
     st.session_state.logged_in = False
     st.session_state.user_data = None
 
-# ==================== BREVO ====================
 try:
-    BREVO_API_KEY = st.secrets.get("BREVO_API_KEY", "")
-    EMAIL_FROM_NAME = st.secrets.get("EMAIL_FROM_NAME", "PMJA Sistema")
+    BREVO_API_KEY      = st.secrets.get("BREVO_API_KEY", "")
+    EMAIL_FROM_NAME    = st.secrets.get("EMAIL_FROM_NAME", "PMJA Sistema")
     EMAIL_FROM_ADDRESS = st.secrets.get("EMAIL_FROM_ADDRESS", "")
-    DEV_EMAIL = st.secrets.get("DEV_EMAIL", "")
-
     if not BREVO_API_KEY or not EMAIL_FROM_ADDRESS:
-        st.error("⚠️ Configure as credenciais do Brevo")
-        st.stop()
-except Exception as e:
-    st.error(f"❌ Erro: {e}")
-    st.stop()
+        st.error("Configure as credenciais do Brevo"); st.stop()
+except Exception as exc:
+    st.error(f"Erro: {exc}"); st.stop()
 
-# ==================== CSS ====================
-st.markdown("""
-<style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-
-    * {font-family: 'Inter', sans-serif !important;}
-
-    #MainMenu, footer, header, .stDeployButton, [data-testid="stToolbar"],
-    div[data-testid="stDecoration"], div[data-testid="stStatusWidget"] {display: none !important;}
-
-    section.main > div {padding-top: 0rem !important;}
-    section.main > div:has(> div.block-container) {padding-top: 0rem !important;}
-    div.block-container {padding-top: 0rem !important; padding-bottom: 1rem !important;}
-    section[data-testid="stMain"] {padding-top: 0px !important;}
-    section[data-testid="stMain"] > div:first-child {padding-top: 0px !important;}
-
-    [data-testid="stVerticalBlock"] {gap: 0.5rem !important;}
-    [data-testid="stVerticalBlock"]:first-child {padding-top: 0rem !important;}
-
-    .block-container {
-        display: flex !important;
-        flex-direction: column !important;
-        justify-content: center !important;
-        min-height: 100vh !important;
-        max-width: 100% !important;
-        margin: 0 auto !important;
-        padding-left: 0 !important;
-        padding-right: 0 !important;
-    }
-
-    section[data-testid="stMain"] {
-        background: linear-gradient(135deg, #f5f7fa 0%, #e8eef3 100%) !important;
-    }
-
-    [data-testid="stForm"] {
-        background: white;
-        padding: 2rem;
-        border-radius: 12px;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.08);
-    }
-
-    .stTextInput input {
-        border-radius: 8px !important;
-        border: 1px solid #e4e4e7 !important;
-        padding: 0.75rem !important;
-    }
-
-    .stTextInput input:focus {
-        border-color: #18181b !important;
-        box-shadow: 0 0 0 3px rgba(24,24,27,0.1) !important;
-    }
-
-    h3 {
-        font-size: 24px !important;
-        margin-bottom: 1rem !important;
-        font-weight: 600 !important;
-        color: #09090b !important;
-    }
-
-    .stButton > button {
-        border-radius: 6px !important;
-        font-weight: 500 !important;
-        font-size: 14px !important;
-        padding: 0.5rem 1rem !important;
-        width: 100% !important;
-        height: 40px !important;
-    }
-
-    .stButton > button[kind="primary"] {
-        background: #18181b !important;
-        color: #fafafa !important;
-    }
-
-    .user-card {
-        background: #ffffff;
-        padding: 1.5rem;
-        border-radius: 8px;
-        border: 1px solid #e4e4e7;
-        margin-bottom: 1rem;
-    }
-
-    .user-avatar {
-        width: 48px;
-        height: 48px;
-        border-radius: 50%;
-        background: linear-gradient(135deg, #18181b 0%, #27272a 100%);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: #fafafa;
-        font-size: 20px;
-        font-weight: 600;
-    }
-</style>
-""", unsafe_allow_html=True)
-
-components.html("""
-<script>
-    window.parent.document.querySelector('section.main').scrollTo(0, 0);
-    window.parent.scrollTo(0, 0);
-</script>
-""", height=0)
-
-# ==================== CONEXÃO ====================
+# ── DB ────────────────────────────────────────────────────────────────
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# ==================== FUNÇÕES ====================
-def hash_password(password):
-    return hashlib.sha256(password.encode()).hexdigest()
+def hash_password(p):
+    return hashlib.sha256(p.encode()).hexdigest()
 
 def generate_code():
-    return ''.join(random.choices(string.digits, k=6))
+    return "".join(random.choices(string.digits, k=6))
 
 def send_verification_email(email, code, username):
     try:
-        html = f"""<div style="text-align:center;padding:40px;"><h1>Código: {code}</h1></div>"""
-        payload = {
-            "sender": {"name": EMAIL_FROM_NAME, "email": EMAIL_FROM_ADDRESS},
-            "to": [{"email": email}],
-            "subject": "Código de Verificação - PMJA",
-            "htmlContent": html
-        }
-        response = requests.post(
+        body = (
+            "<div style='font-family:sans-serif;max-width:420px;margin:0 auto;"
+            "padding:32px;background:#f8fafc;border-radius:12px;'>"
+            "<p style='font-size:10px;color:#94a3b8;margin:0 0 4px;'>PMJA · Scrum</p>"
+            "<h2 style='color:#0f172a;font-size:18px;font-weight:600;margin:0 0 18px;'>"
+            "Código de verificação</h2>"
+            "<div style='background:#fff;border:1px solid #e2e8f0;border-radius:10px;"
+            "padding:22px;text-align:center;margin-bottom:18px;'>"
+            f"<span style='font-size:30px;font-weight:700;letter-spacing:.22em;color:#0075be;'>{code}</span>"
+            "</div>"
+            "<p style='color:#94a3b8;font-size:12px;margin:0;'>Válido por 5 minutos.</p></div>"
+        )
+        r = requests.post(
             "https://api.brevo.com/v3/smtp/email",
             headers={"api-key": BREVO_API_KEY, "content-type": "application/json"},
-            data=json.dumps(payload)
+            data=json.dumps({
+                "sender": {"name": EMAIL_FROM_NAME, "email": EMAIL_FROM_ADDRESS},
+                "to": [{"email": email}],
+                "subject": "Código – PMJA",
+                "htmlContent": body,
+            }),
         )
-        return response.status_code in [200, 201]
-    except:
+        return r.status_code in [200, 201]
+    except Exception:
         return False
+
+COLS = [
+    "id", "username", "email", "password", "full_name", "created_at",
+    "last_login", "email_verified", "verification_code", "code_expiry", "image_url",
+]
 
 def init_users_sheet():
     try:
         df = conn.read(worksheet="users_auth", ttl=0)
         if not df.empty:
-            required_cols = ['id', 'username', 'email', 'password', 'full_name',
-                             'created_at', 'last_login', 'email_verified',
-                             'verification_code', 'code_expiry', 'image_url']
-            for col in required_cols:
-                if col not in df.columns:
-                    df[col] = ''
-
-            if 'email_verified' in df.columns:
-                df['email_verified'] = df['email_verified'].astype(str).str.strip().str.lower().replace('nan', 'false')
-
-            for col in ['verification_code', 'code_expiry', 'image_url']:
-                if col in df.columns:
-                    df[col] = df[col].fillna('').astype(str).replace('nan', '').replace('None', '')
+            for c in COLS:
+                if c not in df.columns:
+                    df[c] = ""
+            df["email_verified"] = (
+                df["email_verified"].astype(str).str.strip().str.lower().replace("nan", "false")
+            )
+            for c in ["verification_code", "code_expiry", "image_url"]:
+                df[c] = df[c].fillna("").astype(str).replace("nan", "").replace("None", "")
         return df
-    except:
-        return pd.DataFrame(columns=['id', 'username', 'email', 'password', 'full_name',
-            'created_at', 'last_login', 'email_verified', 'verification_code', 'code_expiry', 'image_url'])
+    except Exception:
+        return pd.DataFrame(columns=COLS)
 
-def get_user_by_id(user_id):
+def get_user_by_id(uid):
     df = init_users_sheet()
-    user = df[df['id'] == user_id]
-    return user.iloc[0].to_dict() if not user.empty else None
+    u = df[df["id"] == uid]
+    return u.iloc[0].to_dict() if not u.empty else None
 
 def login_user(username, password):
     df = init_users_sheet()
     if df.empty:
-        return False, "❌ Nenhum usuário cadastrado"
-    user = df[df['username'] == username]
-    if user.empty:
-        return False, "❌ Usuário não encontrado"
-    if user.iloc[0]['password'] != hash_password(password):
-        return False, "❌ Senha incorreta"
+        return False, "Nenhum usuário cadastrado"
+    u = df[df["username"] == username]
+    if u.empty:
+        return False, "Usuário não encontrado"
+    if u.iloc[0]["password"] != hash_password(password):
+        return False, "Senha incorreta"
+    if str(u.iloc[0]["email_verified"]).strip().lower() not in ["true", "1", "yes", "1.0"]:
+        return False, "EMAIL_NOT_VERIFIED"
+    return True, u.iloc[0].to_dict()
 
-    email_verified = str(user.iloc[0]['email_verified']).strip().lower()
-
-    if email_verified not in ['true', '1', 'yes', '1.0']:
-        return False, "📧 Email não verificado"
-
-    return True, user.iloc[0].to_dict()
-
-def register_user(username, email, password, full_name, image_url=''):
+def register_user(username, email, password, full_name, image_url=""):
     df = init_users_sheet()
-    if not df.empty and username in df['username'].values:
-        return False, "❌ Usuário já existe", None
-    if not df.empty and email in df['email'].values:
-        return False, "❌ Email já cadastrado", None
-
-    code = generate_code()
-    expiry = (datetime.now() + timedelta(minutes=5)).strftime('%d/%m/%Y %H:%M:%S')
-    new_id = 1 if df.empty else int(df['id'].max()) + 1
-
-    new_user = {
-        'id': str(new_id),
-        'username': str(username),
-        'email': str(email),
-        'password': hash_password(password),
-        'full_name': str(full_name),
-        'created_at': datetime.now().strftime('%d/%m/%Y %H:%M:%S'),
-        'last_login': '',
-        'email_verified': 'false',
-        'verification_code': str(code),
-        'code_expiry': str(expiry),
-        'image_url': str(image_url).strip() if image_url else ''
+    if not df.empty and username in df["username"].values:
+        return False, "Usuário já existe", None
+    if not df.empty and email in df["email"].values:
+        return False, "Email já cadastrado", None
+    code   = generate_code()
+    expiry = (datetime.now() + timedelta(minutes=5)).strftime("%d/%m/%Y %H:%M:%S")
+    new_id = 1 if df.empty else int(df["id"].max()) + 1
+    row = {
+        "id": str(new_id), "username": str(username), "email": str(email),
+        "password": hash_password(password), "full_name": str(full_name),
+        "created_at": datetime.now().strftime("%d/%m/%Y %H:%M:%S"), "last_login": "",
+        "email_verified": "false", "verification_code": str(code),
+        "code_expiry": str(expiry),
+        "image_url": str(image_url).strip() if image_url else "",
     }
-
-    updated_df = pd.concat([df, pd.DataFrame([new_user])], ignore_index=True)
-
-    for col in ['id', 'username', 'email', 'password', 'full_name', 'created_at',
-                'last_login', 'email_verified', 'verification_code', 'code_expiry', 'image_url']:
-        if col not in updated_df.columns:
-            updated_df[col] = ''
-
-    conn.update(worksheet="users_auth", data=updated_df)
+    conn.update(
+        worksheet="users_auth",
+        data=pd.concat([df, pd.DataFrame([row])], ignore_index=True),
+    )
     send_verification_email(email, code, username)
-    return True, "✓ Cadastro realizado!", code
+    return True, "Cadastro realizado!", code
 
 def resend_verification_code(username):
-    """Gera novo código, salva na planilha e reenvia o email"""
     df = init_users_sheet()
-    user = df[df['username'] == username]
-    if user.empty:
-        return False, "❌ Usuário não encontrado"
-
-    code = generate_code()
-    expiry = (datetime.now() + timedelta(minutes=5)).strftime('%d/%m/%Y %H:%M:%S')
-    email = user.iloc[0]['email']
-
-    df2 = conn.read(worksheet="users_auth", ttl=0)
-    df2['verification_code'] = df2['verification_code'].astype(str)
-    df2['code_expiry'] = df2['code_expiry'].astype(str)
-
-    idx = df2[df2['username'] == username].index[0]
-    df2.loc[idx, 'verification_code'] = str(code)
-    df2.loc[idx, 'code_expiry'] = str(expiry)
-
+    u = df[df["username"] == username]
+    if u.empty:
+        return False, "Usuário não encontrado"
+    code   = generate_code()
+    expiry = (datetime.now() + timedelta(minutes=5)).strftime("%d/%m/%Y %H:%M:%S")
+    email  = u.iloc[0]["email"]
+    df2    = conn.read(worksheet="users_auth", ttl=0)
+    idx    = df2[df2["username"] == username].index[0]
+    df2.loc[idx, "verification_code"] = str(code)
+    df2.loc[idx, "code_expiry"]       = str(expiry)
     conn.update(worksheet="users_auth", data=df2)
     send_verification_email(email, code, username)
-    return True, "✓ Código reenviado!"
+    return True, "Código reenviado!"
 
 def verify_email_code(username, code):
     df = init_users_sheet()
-    user = df[df['username'] == username]
-
-    if user.empty:
-        return False, "❌ Usuário não encontrado"
-
-    stored_code = str(user.iloc[0]['verification_code']).strip().replace(' ', '').replace('.0', '')
-    input_code = str(code).strip().replace(' ', '')
-
-    if stored_code != input_code:
-        if stored_code.lstrip('0') == input_code.lstrip('0'):
-            pass
-        else:
-            return False, "❌ Código incorreto"
-
+    u = df[df["username"] == username]
+    if u.empty:
+        return False, "Usuário não encontrado"
+    stored = str(u.iloc[0]["verification_code"]).strip().replace(" ", "").replace(".0", "")
+    inp    = str(code).strip().replace(" ", "")
+    if stored != inp and stored.lstrip("0") != inp.lstrip("0"):
+        return False, "Código incorreto"
     df2 = conn.read(worksheet="users_auth", ttl=0)
-    df2['email_verified'] = df2['email_verified'].astype(str)
-    df2['verification_code'] = df2['verification_code'].astype(str)
-    df2['code_expiry'] = df2['code_expiry'].astype(str)
-
-    user_idx = df2[df2['username'] == username].index[0]
-    df2.loc[user_idx, 'email_verified'] = 'true'
-    df2.loc[user_idx, 'verification_code'] = ''
-    df2.loc[user_idx, 'code_expiry'] = ''
-
+    idx = df2[df2["username"] == username].index[0]
+    df2.loc[idx, "email_verified"]    = "true"
+    df2.loc[idx, "verification_code"] = ""
+    df2.loc[idx, "code_expiry"]       = ""
     conn.update(worksheet="users_auth", data=df2)
     time.sleep(1)
+    return True, "Email verificado!"
 
-    return True, "✓ Email verificado!"
+# ── session state ─────────────────────────────────────────────────────
+for k, v in [
+    ("logged_in", False), ("user_data", None), ("page", "login"),
+    ("temp_username", None), ("msg", ""), ("msg_type", ""),
+    ("_action", None),  # pending action flag — avoids rerun-in-callback
+]:
+    if k not in st.session_state:
+        st.session_state[k] = v
 
-# ==================== SESSION STATE ====================
-if 'logged_in' not in st.session_state:
-    st.session_state.logged_in = False
-if 'user_data' not in st.session_state:
-    st.session_state.user_data = None
-if 'page' not in st.session_state:
-    st.session_state.page = 'login'
-if 'temp_username' not in st.session_state:
-    st.session_state.temp_username = None
-
-# ==================== VERIFICAR SESSÃO ====================
 if not st.session_state.logged_in:
-    session = load_session()
-    if session:
-        user_data = get_user_by_id(session['user_id'])
-        if user_data:
+    s = load_session()
+    if s:
+        ud = get_user_by_id(s["user_id"])
+        if ud:
             st.session_state.logged_in = True
-            st.session_state.user_data = user_data
+            st.session_state.user_data = ud
             st.switch_page("pages/atual.py")
 
-# ==================== INTERFACE ====================
-if not st.session_state.logged_in:
+# ── process pending action BEFORE rendering (top of script = safe) ────
+action = st.session_state.pop("_action", None) if "_action" in st.session_state else None
 
-    # ---- TELA DE VERIFICAÇÃO ----
-    if st.session_state.page == 'verify':
-        col_img, col_form = st.columns([2, 1])
-
-        with col_img:
-            st.markdown("""
-            <div style="padding: 0;">
-                <img src="https://upload.wikimedia.org/wikipedia/commons/9/99/Usina_Hidrel%C3%A9trica_de_Jaguara_%28Rifaina-SP_%284478616135%29.jpg"
-                     style="width: 100%; height: 100vh; object-fit: cover; border-radius: 0;">
-            </div>
-            """, unsafe_allow_html=True)
-
-        with col_form:
-            st.markdown('<div style="padding: 3rem 2rem;">', unsafe_allow_html=True)
-            st.markdown("### 📧 Verificar Email")
-            st.info("💌 Código enviado por email. Válido por 5 minutos.")
-
-            with st.form("verify_form"):
-                code = st.text_input("Código (6 dígitos)", max_chars=6)
-                col1, col2 = st.columns(2)
-                with col1:
-                    verify = st.form_submit_button("Verificar", type="primary")
-                with col2:
-                    cancel = st.form_submit_button("Voltar")
-
-                if cancel:
-                    st.session_state.page = 'login'
-                    st.rerun()
-
-                if verify and code:
-                    success, msg = verify_email_code(st.session_state.temp_username, code)
-                    if success:
-                        st.success(msg)
-                        time.sleep(1)
-                        st.session_state.page = 'login'
-                        st.rerun()
-                    else:
-                        st.error(msg)
-
-            # Botão para reenviar código fora do form
-            if st.button("🔁 Reenviar código"):
-                ok, msg = resend_verification_code(st.session_state.temp_username)
-                if ok:
-                    st.success(msg)
-                else:
-                    st.error(msg)
-
-            st.markdown('</div>', unsafe_allow_html=True)
-
-    # ---- TELA DE CADASTRO ----
-    elif st.session_state.page == 'register':
-        col_img, col_form = st.columns([2, 1])
-
-        with col_img:
-            st.markdown("""
-            <div style="padding: 0;">
-                <img src="https://s2.glbimg.com/e844-OclDbLw-PWuboUy_wtbhiQ=/512x320/smart/e.glbimg.com/og/ed/f/original/2021/12/01/hidreletrica_jaguara_-_rifaina_sp_SGhwNiF.jpg"
-                     style="width: 100%; height: 100vh; object-fit: cover; border-radius: 0;">
-            </div>
-            """, unsafe_allow_html=True)
-
-        with col_form:
-            st.markdown('<div style="padding: 3rem 2rem;">', unsafe_allow_html=True)
-            st.markdown("### 📝 Criar Conta")
-
-            with st.form("register_form"):
-                full_name = st.text_input("Nome Completo")
-                email = st.text_input("Email")
-                username = st.text_input("Usuário")
-                password = st.text_input("Senha", type="password")
-                password_confirm = st.text_input("Confirmar Senha", type="password")
-                image_url = st.text_input("URL da Foto (opcional)")
-
-                col1, col2 = st.columns(2)
-                with col1:
-                    register = st.form_submit_button("Cadastrar", type="primary")
-                with col2:
-                    cancel = st.form_submit_button("Voltar")
-
-                if cancel:
-                    st.session_state.page = 'login'
-                    st.rerun()
-
-                if register:
-                    if not all([full_name, email, username, password, password_confirm]):
-                        st.error("⚠️ Preencha todos os campos obrigatórios")
-                    elif len(password) < 6:
-                        st.error("⚠️ Senha mínimo 6 caracteres")
-                    elif password != password_confirm:
-                        st.error("⚠️ Senhas não coincidem")
-                    else:
-                        success, msg, code = register_user(username, email, password, full_name, image_url)
-                        if success:
-                            st.success(msg)
-                            st.session_state.page = 'verify'
-                            st.session_state.temp_username = username
-                            time.sleep(1)
-                            st.rerun()
-                        else:
-                            st.error(msg)
-
-            st.markdown('</div>', unsafe_allow_html=True)
-
-    # ---- TELA DE LOGIN ----
-    else:
-        col_img, col_form = st.columns([2, 1])
-
-        with col_img:
-            st.markdown("""
-            <div style="padding: 0;">
-                <img src="https://drudu6g9smo13.cloudfront.net/wp-content/uploads/2023/08/UHE-Jaguara.jpg"
-                     style="width: 100%; height: 100vh; object-fit: cover; border-radius: 0;">
-            </div>
-            """, unsafe_allow_html=True)
-
-        with col_form:
-            st.markdown('<div style="padding: 3rem 2rem;">', unsafe_allow_html=True)
-            st.markdown("### 🔐 Login")
-            st.caption("PMJA - Scrum Almoxarifado")
-
-            with st.form("login_form"):
-                username = st.text_input("Usuário")
-                password = st.text_input("Senha", type="password")
-                login = st.form_submit_button("Entrar", type="primary")
-
-                if login:
-                    if username and password:
-                        success, result = login_user(username, password)
-                        if success:
-                            st.session_state.logged_in = True
-                            st.session_state.user_data = result
-                            save_session(result['id'], username, expiry_hours=2)
-                            st.success("✓ Login realizado!")
-                            time.sleep(0.5)
-                            st.switch_page("pages/atual.py")
-                        elif result == "📧 Email não verificado":
-                            # Reenviar código automaticamente e ir para verificação
-                            ok, msg = resend_verification_code(username)
-                            if ok:
-                                st.warning("📧 Email não verificado. Novo código enviado!")
-                                st.session_state.temp_username = username
-                                time.sleep(1)
-                                st.session_state.page = 'verify'
-                                st.rerun()
-                            else:
-                                st.error(f"Erro ao reenviar código: {msg}")
-                        else:
-                            st.error(result)
-                    else:
-                        st.error("⚠️ Preencha todos os campos")
-
-            st.divider()
-            if st.button("Criar nova conta"):
-                st.session_state.page = 'register'
-                st.rerun()
-
-            st.markdown('</div>', unsafe_allow_html=True)
-
-# ---- DASHBOARD (logado) ----
-else:
-    st.markdown("### ✓ Bem-vindo!")
+if action == "go_register":
+    st.session_state.page = "register"
+    st.session_state.msg  = ""
+elif action == "go_login":
+    st.session_state.page = "login"
+    st.session_state.msg  = ""
+elif action == "resend":
+    ok, msg = resend_verification_code(st.session_state.temp_username)
+    st.session_state.msg      = msg
+    st.session_state.msg_type = "success" if ok else "error"
+elif action == "logout":
+    clear_session()
+    st.session_state.page = "login"
+elif action == "extend":
     user = st.session_state.user_data
+    if user:
+        save_session(user["id"], user["username"], 2)
+        st.session_state.msg      = "Sessão estendida por 2 horas"
+        st.session_state.msg_type = "success"
 
-    st.markdown(f"""
-    <div class="user-card">
-        <div style="display:flex;gap:12px;align-items:center;">
-            <div class="user-avatar">{user['full_name'][0].upper()}</div>
-            <div>
-                <div style="font-weight:600;">{user['full_name']}</div>
-                <div style="font-size:13px;color:#71717a;">{user['email']}</div>
-            </div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+# ─────────────────────────────────────────────────────────────────────
+# CSS — injected via zero-height iframe to avoid st.markdown escaping
+# ─────────────────────────────────────────────────────────────────────
+_CSS = """\
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap');
 
-    st.divider()
+#MainMenu,footer,header,.stDeployButton,
+[data-testid="stToolbar"],
+[data-testid="stDecoration"],
+[data-testid="stStatusWidget"]{display:none!important}
 
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("🔄 Estender Sessão"):
-            save_session(user['id'], user['username'], 2)
-            st.success("✓ Sessão estendida por 2 horas!")
-    with col2:
-        if st.button("🚪 Sair"):
-            clear_session()
-            st.session_state.page = 'login'
+*,*::before,*::after{box-sizing:border-box!important;font-family:'DM Sans',-apple-system,sans-serif!important}
+html,body{height:100%;margin:0;padding:0}
+
+section[data-testid="stMain"],
+section[data-testid="stMain"]>div{
+  min-height:100vh!important;padding:0!important;background:#f0f4f8!important
+}
+div.block-container{
+  min-height:100vh!important;max-width:100%!important;padding:32px 12px!important;
+  margin:0!important;background:#f0f4f8!important;
+  display:flex!important;align-items:center!important;justify-content:center!important
+}
+div.block-container>div[data-testid="stVerticalBlock"]{
+  width:100%!important;display:flex!important;flex-direction:column!important;
+  align-items:center!important;justify-content:center!important;gap:0!important
+}
+
+/* outer columns */
+div[data-testid="stHorizontalBlock"]{
+  width:100%!important;display:flex!important;
+  justify-content:center!important;align-items:flex-start!important;gap:0!important
+}
+div[data-testid="stHorizontalBlock"]>div[data-testid="stColumn"]:first-child,
+div[data-testid="stHorizontalBlock"]>div[data-testid="stColumn"]:last-child{
+  flex:1 1 0!important;min-width:0!important;padding:0!important
+}
+
+/* CARD */
+div[data-testid="stHorizontalBlock"]>div[data-testid="stColumn"]:nth-child(2){
+  flex:0 0 min(460px,calc(100vw - 24px))!important;
+  width:min(460px,calc(100vw - 24px))!important;
+  max-width:min(460px,calc(100vw - 24px))!important;
+  min-width:0!important;padding:0!important;background:#ffffff!important;
+  border-radius:20px!important;overflow:hidden!important;
+  box-shadow:0 0 0 1px rgba(0,0,0,.06),0 4px 6px rgba(0,0,0,.05),0 24px 60px rgba(0,0,0,.14)!important
+}
+div[data-testid="stHorizontalBlock"]>div[data-testid="stColumn"]:nth-child(2)>div[data-testid="stVerticalBlock"]{
+  gap:0!important
+}
+
+/* card children: horizontal padding except banner */
+div[data-testid="stHorizontalBlock"]>div[data-testid="stColumn"]:nth-child(2)>div[data-testid="stVerticalBlock"]>div{
+  padding-left:28px!important;padding-right:28px!important
+}
+div[data-testid="stHorizontalBlock"]>div[data-testid="stColumn"]:nth-child(2)>div[data-testid="stVerticalBlock"]>div:first-child{
+  padding-left:0!important;padding-right:0!important
+}
+div[data-testid="stHorizontalBlock"]>div[data-testid="stColumn"]:nth-child(2)>div[data-testid="stVerticalBlock"]>div:nth-child(2){
+  padding-top:22px!important;padding-bottom:4px!important
+}
+div[data-testid="stHorizontalBlock"]>div[data-testid="stColumn"]:nth-child(2)>div[data-testid="stVerticalBlock"]>div:last-child{
+  padding-bottom:28px!important
+}
+
+/* FORM — no border, no background, rounded */
+div[data-testid="stForm"]{
+  border:none!important;padding:0!important;background:transparent!important;
+  border-radius:0!important
+}
+div[data-testid="stForm"]>div>div[data-testid="stVerticalBlock"]{
+  gap:0!important;padding:0!important
+}
+
+/* INPUT labels */
+div[data-testid="stTextInput"] label{display:block!important;margin-bottom:6px!important}
+div[data-testid="stTextInput"] label p{
+  font-size:12px!important;font-weight:600!important;color:#64748b!important;
+  letter-spacing:.025em!important;margin:0!important;line-height:1!important
+}
+
+/* INPUT box */
+div[data-testid="stTextInput"]>div>div>input{
+  height:44px!important;background:#f8fafc!important;
+  border:1.5px solid #e2e8f0!important;border-radius:12px!important;
+  padding:0 14px!important;font-size:14px!important;color:#0f172a!important;
+  width:100%!important;outline:none!important;box-shadow:none!important;
+  transition:border-color .15s,box-shadow .15s,background .15s!important
+}
+div[data-testid="stTextInput"]>div>div>input::placeholder{color:#c8d3dd!important;font-size:13.5px!important}
+div[data-testid="stTextInput"]>div>div>input:focus{
+  border-color:#0075be!important;background:#ffffff!important;
+  box-shadow:0 0 0 3px rgba(0,117,190,.13)!important
+}
+div[data-testid="InputInstructions"]{display:none!important}
+
+/* field spacing */
+div[data-testid="stTextInput"]{margin-top:14px!important;margin-bottom:0!important}
+
+/* form submit spacing */
+div[data-testid="stFormSubmitButton"]{margin-top:22px!important}
+
+/* BUTTONS */
+div[data-testid="stButton"]>button,
+div[data-testid="stFormSubmitButton"]>button{
+  font-size:14px!important;font-weight:600!important;height:46px!important;
+  border-radius:12px!important;width:100%!important;cursor:pointer!important;
+  transition:all .18s!important;letter-spacing:.01em!important
+}
+div[data-testid="stFormSubmitButton"]>button[kind="primary"],
+div[data-testid="stButton"]>button[kind="primary"]{
+  background:#0075be!important;color:#ffffff!important;border:none!important;
+  box-shadow:0 1px 2px rgba(0,0,0,.08),0 4px 14px rgba(0,117,190,.28)!important
+}
+div[data-testid="stFormSubmitButton"]>button[kind="primary"]:hover,
+div[data-testid="stButton"]>button[kind="primary"]:hover{
+  background:#005fa0!important;
+  box-shadow:0 2px 4px rgba(0,0,0,.1),0 8px 20px rgba(0,117,190,.36)!important;
+  transform:translateY(-1px)!important
+}
+div[data-testid="stFormSubmitButton"]>button[kind="secondary"],
+div[data-testid="stButton"]>button[kind="secondary"]{
+  background:#ffffff!important;color:#64748b!important;
+  border:1.5px solid #e2e8f0!important;box-shadow:none!important
+}
+div[data-testid="stFormSubmitButton"]>button[kind="secondary"]:hover,
+div[data-testid="stButton"]>button[kind="secondary"]:hover{
+  background:#f8fafc!important;border-color:#0075be!important;color:#0075be!important
+}
+
+/* 2-col grids inside forms */
+div[data-testid="stForm"]>div>div[data-testid="stVerticalBlock"]>div[data-testid="stHorizontalBlock"]{
+  gap:12px!important;width:100%!important;margin-top:14px!important;
+  padding:0!important;justify-content:flex-start!important;align-items:flex-start!important
+}
+div[data-testid="stForm"]>div>div[data-testid="stVerticalBlock"]>div[data-testid="stHorizontalBlock"]>div[data-testid="stColumn"]{
+  flex:1 1 0!important;min-width:0!important;padding:0!important
+}
+div[data-testid="stForm"]>div>div[data-testid="stVerticalBlock"]>div[data-testid="stHorizontalBlock"] div[data-testid="stTextInput"]{
+  margin-top:0!important
+}
+
+div[data-testid="stButton"]{margin:0!important}
+
+div[data-testid="stAlert"]{
+  font-size:13px!important;border-radius:12px!important;
+  margin-bottom:16px!important;margin-top:4px!important
+}
+</style>
+"""
+_html(_CSS, height=0)
+
+# ── page state ────────────────────────────────────────────────────────
+pg   = "dashboard" if st.session_state.logged_in else st.session_state.page
+user = st.session_state.user_data
+
+PHOTOS = {
+    "login":     "https://drudu6g9smo13.cloudfront.net/wp-content/uploads/2023/08/UHE-Jaguara.jpg",
+    "register":  "https://s2.glbimg.com/e844-OclDbLw-PWuboUy_wtbhiQ=/512x320/smart/e.glbimg.com/og/ed/f/original/2021/12/01/hidreletrica_jaguara_-_rifaina_sp_SGhwNiF.jpg",
+    "verify":    "https://upload.wikimedia.org/wikipedia/commons/9/99/Usina_Hidrel%C3%A9trica_de_Jaguara_%28Rifaina-SP_%284478616135%29.jpg",
+    "dashboard": "https://drudu6g9smo13.cloudfront.net/wp-content/uploads/2023/08/UHE-Jaguara.jpg",
+}
+TITLES = {
+    "login":     ("Bem-vindo de volta", "ACESSAR CONTA"),
+    "register":  ("Criar conta",        "DADOS DE CADASTRO"),
+    "verify":    ("Verificar email",    "CÓDIGO DE VERIFICAÇÃO"),
+    "dashboard": (
+        ("Olá, " + user["full_name"].split()[0]) if user else "Painel",
+        "PAINEL",
+    ),
+}
+banner_title, form_label = TITLES.get(pg, TITLES["login"])
+photo = PHOTOS.get(pg, PHOTOS["login"])
+
+
+def flush():
+    m, t = st.session_state.msg, st.session_state.msg_type
+    st.session_state.msg = ""
+    st.session_state.msg_type = ""
+    if not m:
+        return
+    {"error": st.error, "success": st.success}.get(t, st.info)(m)
+
+
+def sp(px):
+    st.markdown(
+        "<div style='height:" + str(px) + "px;line-height:0;font-size:0;'></div>",
+        unsafe_allow_html=True,
+    )
+
+
+def divider():
+    st.markdown(
+        "<div style='display:flex;align-items:center;gap:12px;margin:18px 0 14px;'>"
+        "<div style='flex:1;height:1px;background:#e2e8f0;'></div>"
+        "<span style='font-size:11.5px;color:#94a3b8;font-weight:500;'>ou</span>"
+        "<div style='flex:1;height:1px;background:#e2e8f0;'></div></div>",
+        unsafe_allow_html=True,
+    )
+
+
+# ═════════════════════════════════════════════════════════════════════
+# LAYOUT
+# ═════════════════════════════════════════════════════════════════════
+_, card, _ = st.columns([1, 1.4, 1])
+
+with card:
+
+    # BANNER
+    st.markdown(
+        "<div style='position:relative;width:100%;height:196px;overflow:hidden;'>"
+        "<img src='" + photo + "' style='position:absolute;inset:0;width:100%;height:100%;"
+        "object-fit:cover;object-position:center 40%;filter:brightness(.55) saturate(1.2);'>"
+        "<div style='position:absolute;inset:0;"
+        "background:linear-gradient(180deg,transparent 20%,rgba(15,23,42,.72) 100%);'></div>"
+        "<div style='position:absolute;bottom:0;left:0;right:0;padding:0 28px 22px;'>"
+        "<div style='font-size:9px;font-weight:700;letter-spacing:.22em;"
+        "color:rgba(255,255,255,.42);text-transform:uppercase;margin-bottom:7px;line-height:1;'>"
+        "PMJA · UHE Jaguara · Rifaina SP</div>"
+        "<div style='font-size:23px;font-weight:700;color:#fff;line-height:1.2;"
+        "letter-spacing:-.2px;text-shadow:0 2px 10px rgba(0,0,0,.3);'>"
+        + banner_title +
+        "</div></div></div>",
+        unsafe_allow_html=True,
+    )
+
+    # SECTION LABEL
+    st.markdown(
+        "<div style='font-size:9px;font-weight:700;letter-spacing:.22em;"
+        "text-transform:uppercase;color:#0075be;line-height:1;'>"
+        + form_label + "</div>",
+        unsafe_allow_html=True,
+    )
+
+    # ══════════════════════════════════════════════════════════════
+    # LOGIN
+    # ══════════════════════════════════════════════════════════════
+    if pg == "login":
+        flush()
+        sp(14)
+
+        with st.form("f_login", border=False):
+            st.text_input("Usuário", placeholder="nome_usuario", key="li_u")
+            st.text_input("Senha", placeholder="••••••••", type="password", key="li_p")
+            sub = st.form_submit_button("Entrar →", type="primary", use_container_width=True)
+
+        # Process OUTSIDE form context — no rerun-in-callback
+        if sub:
+            u = st.session_state.li_u.strip()
+            p = st.session_state.li_p
+            if not (u and p):
+                st.session_state.msg      = "Preencha todos os campos"
+                st.session_state.msg_type = "error"
+                st.rerun()
+            else:
+                ok, result = login_user(u, p)
+                if ok:
+                    st.session_state.logged_in = True
+                    st.session_state.user_data = result
+                    save_session(result["id"], u, 2)
+                    st.switch_page("pages/atual.py")
+                elif result == "EMAIL_NOT_VERIFIED":
+                    resend_verification_code(u)
+                    st.session_state.temp_username = u
+                    st.session_state.page          = "verify"
+                    st.session_state.msg           = "📧 Código reenviado para seu email"
+                    st.session_state.msg_type      = "info"
+                    st.rerun()
+                else:
+                    st.session_state.msg      = result
+                    st.session_state.msg_type = "error"
+                    st.rerun()
+
+        divider()
+
+        # Use session flag instead of rerun-in-callback
+        if st.button("Criar nova conta →", use_container_width=True, key="go_reg"):
+            st.session_state.page = "register"
+            st.session_state.msg  = ""
+            st.rerun()
+        sp(4)
+
+    # ══════════════════════════════════════════════════════════════
+    # REGISTER
+    # ══════════════════════════════════════════════════════════════
+    elif pg == "register":
+        flush()
+        sp(14)
+
+        with st.form("f_register", border=False):
+            st.text_input("Nome completo", placeholder="Seu nome completo", key="rg_n")
+            st.text_input("Email", placeholder="seu@email.com", key="rg_e")
+            c1, c2 = st.columns(2)
+            with c1:
+                st.text_input("Usuário", placeholder="nome_usuario", key="rg_u")
+            with c2:
+                st.text_input("URL da foto", placeholder="https://...", key="rg_i")
+            c3, c4 = st.columns(2)
+            with c3:
+                st.text_input("Senha", placeholder="Mín. 6 caracteres", type="password", key="rg_p")
+            with c4:
+                st.text_input("Confirmar senha", placeholder="Repita a senha", type="password", key="rg_p2")
+            sub = st.form_submit_button("Cadastrar →", type="primary", use_container_width=True)
+
+        if sub:
+            fn  = st.session_state.rg_n.strip()
+            em  = st.session_state.rg_e.strip()
+            us  = st.session_state.rg_u.strip()
+            img = st.session_state.rg_i.strip()
+            pw  = st.session_state.rg_p
+            pw2 = st.session_state.rg_p2
+            if not all([fn, em, us, pw, pw2]):
+                st.session_state.msg      = "Preencha todos os campos"
+                st.session_state.msg_type = "error"
+            elif len(pw) < 6:
+                st.session_state.msg      = "Senha mínimo 6 caracteres"
+                st.session_state.msg_type = "error"
+            elif pw != pw2:
+                st.session_state.msg      = "Senhas não coincidem"
+                st.session_state.msg_type = "error"
+            else:
+                ok, msg, _ = register_user(us, em, pw, fn, img)
+                if ok:
+                    st.session_state.temp_username = us
+                    st.session_state.page          = "verify"
+                    st.session_state.msg           = "Conta criada! Verifique seu email."
+                    st.session_state.msg_type      = "success"
+                else:
+                    st.session_state.msg      = msg
+                    st.session_state.msg_type = "error"
             st.rerun()
 
-    st.divider()
-    if st.button("📋 Acessar Tarefas", type="primary"):
-        st.switch_page("pages/atual.py")
+        divider()
+
+        if st.button("← Já tenho conta", use_container_width=True, key="go_log"):
+            st.session_state.page = "login"
+            st.session_state.msg  = ""
+            st.rerun()
+        sp(4)
+
+    # ══════════════════════════════════════════════════════════════
+    # VERIFY
+    # ══════════════════════════════════════════════════════════════
+    elif pg == "verify":
+        flush()
+        sp(14)
+        st.markdown(
+            "<div style='display:flex;align-items:center;gap:10px;"
+            "background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;"
+            "padding:12px 15px;margin-bottom:16px;'>"
+            "<span style='font-size:18px;flex-shrink:0;'>📧</span>"
+            "<span style='font-size:13px;color:#1d4ed8;font-weight:500;line-height:1.4;'>"
+            "Código enviado por email. Válido por 5 minutos.</span></div>",
+            unsafe_allow_html=True,
+        )
+
+        with st.form("f_verify", border=False):
+            st.text_input("Código de 6 dígitos", placeholder="000000", max_chars=6, key="vf_c")
+            sp(8)
+            cv1, cv2 = st.columns(2)
+            with cv1:
+                confirm = st.form_submit_button("Confirmar", type="primary", use_container_width=True)
+            with cv2:
+                go_back = st.form_submit_button("← Voltar", use_container_width=True)
+
+        if confirm:
+            ok, msg = verify_email_code(st.session_state.temp_username, st.session_state.vf_c)
+            st.session_state.page      = "login" if ok else "verify"
+            st.session_state.msg       = msg
+            st.session_state.msg_type  = "success" if ok else "error"
+            st.rerun()
+
+        if go_back:
+            st.session_state.page = "login"
+            st.rerun()
+
+        sp(8)
+        if st.button("Reenviar código por email", use_container_width=True, key="resend"):
+            ok, msg = resend_verification_code(st.session_state.temp_username)
+            st.session_state.msg      = msg
+            st.session_state.msg_type = "success" if ok else "error"
+            st.rerun()
+        sp(4)
+
+    # ══════════════════════════════════════════════════════════════
+    # DASHBOARD
+    # ══════════════════════════════════════════════════════════════
+    else:
+        flush()
+        uname   = user["full_name"] if user else ""
+        uemail  = user["email"]     if user else ""
+        initial = uname[0].upper()  if uname else "?"
+        sp(14)
+
+        st.markdown(
+            "<div style='display:flex;align-items:center;gap:14px;"
+            "background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:14px;"
+            "padding:14px 16px;margin-bottom:18px;'>"
+            "<div style='width:44px;height:44px;border-radius:50%;flex-shrink:0;"
+            "background:linear-gradient(135deg,#0075be,#38bdf8);display:flex;"
+            "align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:18px;"
+            "box-shadow:0 2px 8px rgba(0,117,190,.3);'>" + initial + "</div>"
+            "<div><div style='font-size:14px;font-weight:600;color:#0f172a;'>" + uname + "</div>"
+            "<div style='font-size:12px;color:#64748b;margin-top:3px;'>" + uemail + "</div>"
+            "</div></div>",
+            unsafe_allow_html=True,
+        )
+
+        if st.button("📋 Acessar Tarefas →", type="primary", use_container_width=True, key="tasks"):
+            st.switch_page("pages/atual.py")
+
+        sp(10)
+        d1, d2 = st.columns(2)
+        with d1:
+            if st.button("🔄 Estender Sessão", use_container_width=True, key="extend"):
+                save_session(user["id"], user["username"], 2)
+                st.session_state.msg      = "Sessão estendida por 2 horas"
+                st.session_state.msg_type = "success"
+                st.rerun()
+        with d2:
+            if st.button("Sair", use_container_width=True, key="logout"):
+                clear_session()
+                st.session_state.page = "login"
+                st.rerun()
+        sp(4)
+
+    # FOOTER
+    st.markdown(
+        "<div style='text-align:center;padding-top:12px;"
+        "font-size:10px;color:#94a3b8;letter-spacing:.1em;'>"
+        "PMJA · UHE Jaguara · Rifaina SP</div>",
+        unsafe_allow_html=True,
+    )

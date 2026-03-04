@@ -182,12 +182,16 @@ if not st.session_state.get('logged_in'):
         else:
             st.set_page_config(layout="centered",initial_sidebar_state="collapsed")
             st.error("⚠️ Sessão inválida.")
-            st.button("← Login",type="primary",on_click=lambda:(clear_session(),st.switch_page("app.py")))
+            #st.button("← Login",type="primary",on_click=lambda:(clear_session(),st.switch_page("app.py")))
+            if st.button("← Login", key="go_back"):
+                st.switch_page("app.py")
             st.stop()
     else:
         st.set_page_config(layout="centered",initial_sidebar_state="collapsed")
         st.error("⚠️ Faça login primeiro!")
-        st.button("← Login",type="primary",on_click=lambda: st.switch_page("app.py"))
+        #st.button("← Login",type="primary",on_click=lambda: st.switch_page("app.py"))
+        if st.button("← Login", key="go_back"):
+            st.switch_page("app.py")
         st.stop()
 
 st.set_page_config(layout="wide",initial_sidebar_state="collapsed")
@@ -803,3 +807,6 @@ components.html(
     build_board(fdf,user,img_url,mins,st.session_state.show_menu,all_prio,all_stat,users_list),
     height=4000, scrolling=True
 )
+## ✅ CORRETO — rerun fora do callback
+# if st.button("← Login", key="go_back"):
+#     st.switch_page("app.py")  # ou st.rerun()
