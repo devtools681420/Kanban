@@ -3,14 +3,15 @@ primaryColor = "#0075be"
 
 [client]
 showSidebarNavigation = false
-toolbarMode = "minimal"         
+toolbarMode = "minimal"
 
 [browser]
 gatherUsageStats = false
 
 [server]
 headless = true
+enableCORS = false
+enableXsrfProtection = false
 
 [ui]
 hideTopBar = true
-
