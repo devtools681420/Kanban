@@ -11,3 +11,6 @@ gatherUsageStats = false
 [server]
 headless = true
 
+[ui]
+hideTopBar = true
+
