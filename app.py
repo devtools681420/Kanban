@@ -12,10 +12,10 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# ── COOKIE SESSION ────────────────────────────────────────────────────
+# ── COOKIE SESSION ─────────────────────────────────────────2───────────
 _cc = CookieController()
 COOKIE_NAME          = "pmja_session"
-SESSION_EXPIRY_HOURS = 2
+SESSION_EXPIRY_HOURS = 12
 
 def save_session(user_id, username, expiry_hours=SESSION_EXPIRY_HOURS):
     expiry = datetime.now() + timedelta(hours=expiry_hours)
