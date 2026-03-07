@@ -297,20 +297,6 @@ def update_sheet(td, action):
 st.markdown("""<style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 *{font-family:'Inter',sans-serif!important}
-/* 1. Remove a barra de rodapé do modo Embed */
-footer {
-    display: none !important;
-}
-
-/* 2. Remove especificamente o texto "Built with Streamlit" e o botão "Fullscreen" */
-.stApp [data-testid="stFooter"] {
-    display: none !important;
-}
-
-/* 3. Garante que não haja espaço vazio na parte de baixo da página */
-.main .block-container {
-    padding-bottom: 0rem !important;
-}
 #MainMenu,footer,header,.stDeployButton,[data-testid="stToolbar"],[data-testid="stToolbarActions"],
 [data-testid="stDecoration"],[data-testid="stStatusWidget"],[data-testid="collapsedControl"],
 [data-testid="stSidebarCollapsedControl"],[data-testid="manage-app-button"],[data-testid="stBaseButton-header"],
@@ -775,6 +761,47 @@ document.querySelectorAll('.dz').forEach(z=>{{
   }});
 }});
 </script></body></html>'''
+
+# ── REMOÇÃO TOTAL DO RODAPÉ (BUILT WITH STREAMLIT / FULLSCREEN) ──────────
+components.html("""
+    <script>
+    const hideFooter = () => {
+        // 1. Tenta encontrar o rodapé no nível superior (onde o modo Embed o coloca)
+        const footer = window.parent.document.querySelector('footer');
+        if (footer) {
+            footer.style.display = 'none';
+            footer.style.visibility = 'hidden';
+        }
+        
+        // 2. Tenta encontrar o contêiner específico do rodapé do modo Embed
+        const embedFooter = window.parent.document.querySelector('[data-testid="stFooter"]');
+        if (embedFooter) {
+            embedFooter.style.display = 'none';
+            embedFooter.style.visibility = 'hidden';
+        }
+        
+        // 3. Remove qualquer espaço em branco que o rodapé ocupava
+        const mainContent = window.parent.document.querySelector('.stApp');
+        if (mainContent) {
+            mainContent.style.marginBottom = '0px';
+            mainContent.style.paddingBottom = '0px';
+        }
+    };
+
+    // Executa imediatamente e repete para garantir que o Streamlit não o recrie
+    hideFooter();
+    setInterval(hideFooter, 1000); 
+    </script>
+    """, height=0)
+
+# CSS complementar para garantir que o contêiner interno não tenha margens
+st.markdown("""
+    <style>
+    footer {visibility: hidden; display: none !important;}
+    [data-testid="stFooter"] {display: none !important;}
+    .block-container {padding-bottom: 0rem !important;}
+    </style>
+    """, unsafe_allow_html=True)
 
 components.html(
     build_board(fdf, user, img_url, mins, st.session_state.show_menu, all_prio, all_stat, users_list),
