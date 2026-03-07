@@ -8,7 +8,7 @@ import streamlit.components.v1 as components
 # ── TIMEZONE BRASÍLIA ──
 def now_brt():
     return datetime.now(ZoneInfo("America/Sao_Paulo"))
-
+#st.markdown
 # ── COOKIE SESSION ────────────────────────────────────────────────────
 _cc                  = CookieController()
 COOKIE_NAME          = "pmja_session"

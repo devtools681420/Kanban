@@ -12,7 +12,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# ── COOKIE SESSION ─────────────────────────────────────────2───────────
+# ── COOKIE SESSION ────────────────────────────────────────────────────
 _cc = CookieController()
 COOKIE_NAME          = "pmja_session"
 SESSION_EXPIRY_HOURS = 8
