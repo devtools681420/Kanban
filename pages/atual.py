@@ -5,6 +5,19 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 import streamlit.components.v1 as components
 
+# ── FORCE EMBED=TRUE (remove "Hosted with Streamlit" badge) ──────────
+components.html("""
+<script>
+(function(){
+    var url = new URL(window.parent.location.href);
+    if(url.searchParams.get('embed') !== 'true'){
+        url.searchParams.set('embed','true');
+        window.parent.location.replace(url.toString());
+    }
+})();
+</script>
+""", height=0)
+
 # ── TIMEZONE BRASÍLIA ──
 def now_brt():
     return datetime.now(ZoneInfo("America/Sao_Paulo"))
