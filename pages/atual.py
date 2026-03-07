@@ -297,20 +297,20 @@ def update_sheet(td, action):
 st.markdown("""<style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 *{font-family:'Inter',sans-serif!important}
-    /* 1. Remove a barra de rodapé do modo Embed */
-    footer {
-        display: none !important;
-    }
+/* 1. Remove a barra de rodapé do modo Embed */
+footer {
+    display: none !important;
+}
 
-    /* 2. Remove especificamente o texto "Built with Streamlit" e o botão "Fullscreen" */
-    .stApp [data-testid="stFooter"] {
-        display: none !important;
-    }
+/* 2. Remove especificamente o texto "Built with Streamlit" e o botão "Fullscreen" */
+.stApp [data-testid="stFooter"] {
+    display: none !important;
+}
 
-    /* 3. Garante que não haja espaço vazio na parte de baixo da página */
-    .main .block-container {
-        padding-bottom: 0rem !important;
-    }
+/* 3. Garante que não haja espaço vazio na parte de baixo da página */
+.main .block-container {
+    padding-bottom: 0rem !important;
+}
 #MainMenu,footer,header,.stDeployButton,[data-testid="stToolbar"],[data-testid="stToolbarActions"],
 [data-testid="stDecoration"],[data-testid="stStatusWidget"],[data-testid="collapsedControl"],
 [data-testid="stSidebarCollapsedControl"],[data-testid="manage-app-button"],[data-testid="stBaseButton-header"],
