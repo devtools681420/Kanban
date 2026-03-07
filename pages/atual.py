@@ -5,19 +5,6 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 import streamlit.components.v1 as components
 
-# ── FORCE EMBED=TRUE ──────────────────────────────────────────────────
-components.html("""<script>
-(function(){
-  try{
-    var p=window.parent,u=new URL(p.location.href);
-    if(u.searchParams.get('embed')!=='true'){
-      u.searchParams.set('embed','true');
-      p.location.replace(u.toString());
-    }
-  }catch(e){}
-})();
-</script>""", height=0)
-
 # ── TIMEZONE BRASÍLIA ──
 def now_brt():
     return datetime.now(ZoneInfo("America/Sao_Paulo"))
@@ -41,6 +28,7 @@ def save_session(user_id, username, expiry_hours=SESSION_EXPIRY_HOURS):
     st.session_state.session_exp = expiry
 
 def load_session():
+    # 1) session_state ainda ativo
     if st.session_state.get("logged_in") and st.session_state.get("session_exp"):
         if datetime.now() < st.session_state.session_exp:
             return {
@@ -49,6 +37,7 @@ def load_session():
             }
         clear_session()
         return None
+    # 2) cookie do browser
     try:
         c = _cc.get(COOKIE_NAME)
         if not c:
@@ -227,6 +216,7 @@ def recalc():
             formulas = make_formulas(row_num, resp_id, user_id)
             for k, val in formulas.items():
                 df.loc[i, k] = val
+          
         conn.update(worksheet="tasks", data=df)
         load_data.clear()
         return True
@@ -310,12 +300,9 @@ st.markdown("""<style>
 #MainMenu,footer,header,.stDeployButton,[data-testid="stToolbar"],[data-testid="stToolbarActions"],
 [data-testid="stDecoration"],[data-testid="stStatusWidget"],[data-testid="collapsedControl"],
 [data-testid="stSidebarCollapsedControl"],[data-testid="manage-app-button"],[data-testid="stBaseButton-header"],
-[data-testid="stFooter"],button[title="Deploy"],button[aria-label="Deploy"],
-button[aria-label="Share"],button[title="Share"],.stAppDeployButton,
-section[data-testid="stSidebar"],div[class*="deployButton"],div[class*="viewerBadge"],
-div[class*="StatusWidget"],div[class*="_container_1upux_"],div[class*="_hostedName_"],
-div[class*="_linkOutText_"],div[class*="_profileContainer_"],div[class*="_badgeContainer_"],
-div[class*="_badge_"],iframe[title="streamlit_analytics"]{display:none!important;visibility:hidden!important;height:0!important}
+button[title="Deploy"],button[aria-label="Deploy"],button[aria-label="Share"],button[title="Share"],
+.stAppDeployButton,section[data-testid="stSidebar"],div[class*="deployButton"],div[class*="viewerBadge"],
+div[class*="StatusWidget"],iframe[title="streamlit_analytics"]{display:none!important}
 footer{visibility:hidden!important;height:0!important}
 .block-container,.element-container,.stMarkdown{padding:0!important;margin:0!important;max-width:100%!important}
 .stButton>button{position:fixed!important;left:-9999px!important;opacity:0!important;pointer-events:all!important;width:1px!important;height:1px!important}

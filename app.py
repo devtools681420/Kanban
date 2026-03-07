@@ -12,19 +12,6 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# ── FORCE EMBED=TRUE ──────────────────────────────────────────────────
-_html("""<script>
-(function(){
-  try{
-    var p=window.parent,u=new URL(p.location.href);
-    if(u.searchParams.get('embed')!=='true'){
-      u.searchParams.set('embed','true');
-      p.location.replace(u.toString());
-    }
-  }catch(e){}
-})();
-</script>""", height=0)
-
 # ── COOKIE SESSION ────────────────────────────────────────────────────
 _cc = CookieController()
 COOKIE_NAME          = "pmja_session"
@@ -44,6 +31,7 @@ def save_session(user_id, username, expiry_hours=SESSION_EXPIRY_HOURS):
     st.session_state.session_exp = expiry
 
 def load_session():
+    # 1) session_state ainda ativo (mesma aba sem recarregar)
     if st.session_state.get("logged_in") and st.session_state.get("session_exp"):
         if datetime.now() < st.session_state.session_exp:
             return {
@@ -52,6 +40,7 @@ def load_session():
             }
         clear_session()
         return None
+    # 2) cookie do browser (após F5 ou nova aba no mesmo browser)
     try:
         c = _cc.get(COOKIE_NAME)
         if not c:
@@ -280,14 +269,7 @@ _CSS = """\
 #MainMenu,footer,header,.stDeployButton,
 [data-testid="stToolbar"],
 [data-testid="stDecoration"],
-[data-testid="stStatusWidget"],
-[data-testid="stFooter"],
-div[class*="_container_1upux_"],
-div[class*="_hostedName_"],
-div[class*="_linkOutText_"],
-div[class*="_profileContainer_"],
-div[class*="_badgeContainer_"],
-div[class*="_badge_"]{display:none!important;visibility:hidden!important;height:0!important}
+[data-testid="stStatusWidget"]{display:none!important}
 
 *,*::before,*::after{box-sizing:border-box!important;font-family:'DM Sans',-apple-system,sans-serif!important}
 html,body{height:100%;margin:0;padding:0}
