@@ -8,7 +8,7 @@ import streamlit.components.v1 as components
 # ── TIMEZONE BRASÍLIA ──
 def now_brt():
     return datetime.now(ZoneInfo("America/Sao_Paulo"))
-#st.markdown
+
 # ── COOKIE SESSION ────────────────────────────────────────────────────
 _cc                  = CookieController()
 COOKIE_NAME          = "pmja_session"
@@ -297,26 +297,6 @@ def update_sheet(td, action):
 st.markdown("""<style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 *{font-family:'Inter',sans-serif!important}
-/* 1. Remove o cabeçalho superior (Fork, GitHub, Menu) */
-header[data-testid="stHeader"] {
-    display: none !important;
-}
-
-/* 2. Remove o botão flutuante vermelho (Manage App) no canto inferior */
-[data-testid="manage-app-button"] {
-    display: none !important;
-}
-
-/* 3. Remove a decoração de linha colorida no topo */
-[data-testid="stDecoration"] {
-    display: none !important;
-}
-
-/* 4. Ajusta o espaço que sobra no topo após remover o header */
-.block-container {
-    padding-top: 0rem !important;
-    margin-top: -2rem !important;
-}
 #MainMenu,footer,header,.stDeployButton,[data-testid="stToolbar"],[data-testid="stToolbarActions"],
 [data-testid="stDecoration"],[data-testid="stStatusWidget"],[data-testid="collapsedControl"],
 [data-testid="stSidebarCollapsedControl"],[data-testid="manage-app-button"],[data-testid="stBaseButton-header"],
