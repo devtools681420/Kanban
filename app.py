@@ -6,20 +6,6 @@ from datetime import datetime, timedelta
 import hashlib, random, string, requests, json, time, uuid
 from streamlit.components.v1 import html as _html
 
-import streamlit.components.v1 as components
-
-components.html("""
-<script>
-(function(){
-    var url = new URL(window.parent.location.href);
-    if(url.searchParams.get('embed') !== 'true'){
-        url.searchParams.set('embed','true');
-        window.parent.location.replace(url.toString());
-    }
-})();
-</script>
-""", height=0)
-
 st.set_page_config(
     page_title="PMJA Scrum",
     layout="wide",
