@@ -12,7 +12,7 @@ def now_brt():
 # ── COOKIE SESSION ────────────────────────────────────────────────────
 _cc                  = CookieController()
 COOKIE_NAME          = "pmja_session"
-SESSION_EXPIRY_HOURS = 8
+SESSION_EXPIRY_HOURS = 2
 
 def save_session(user_id, username, expiry_hours=SESSION_EXPIRY_HOURS):
     expiry = datetime.now() + timedelta(hours=expiry_hours)
@@ -28,6 +28,7 @@ def save_session(user_id, username, expiry_hours=SESSION_EXPIRY_HOURS):
     st.session_state.session_exp = expiry
 
 def load_session():
+    # 1) session_state ainda ativo
     if st.session_state.get("logged_in") and st.session_state.get("session_exp"):
         if datetime.now() < st.session_state.session_exp:
             return {
@@ -36,6 +37,7 @@ def load_session():
             }
         clear_session()
         return None
+    # 2) cookie do browser
     try:
         c = _cc.get(COOKIE_NAME)
         if not c:
@@ -67,140 +69,6 @@ def session_mins():
     if exp:
         return max(0, int((exp - datetime.now()).total_seconds() // 60))
     return 0
-
-# ── CSS PARA REMOVER TODOS OS ELEMENTOS DO STREAMLIT ─────────────────
-# Aplicado o mais cedo possível, antes de qualquer outro conteúdo
-HIDE_STREAMLIT_STYLE = """
-<style>
-    /* ── Elementos gerais ── */
-    #MainMenu { visibility: hidden !important; display: none !important; }
-    header { visibility: hidden !important; display: none !important; }
-    footer { visibility: hidden !important; display: none !important; }
-
-    /* ── Toolbar e botões de deploy/share ── */
-    [data-testid="stToolbar"] { display: none !important; }
-    [data-testid="stToolbarActions"] { display: none !important; }
-    [data-testid="stDecoration"] { display: none !important; }
-    [data-testid="stStatusWidget"] { display: none !important; }
-    [data-testid="collapsedControl"] { display: none !important; }
-    [data-testid="stSidebarCollapsedControl"] { display: none !important; }
-    [data-testid="manage-app-button"] { display: none !important; }
-    [data-testid="stBaseButton-header"] { display: none !important; }
-    [data-testid="stAppDeployButton"] { display: none !important; }
-    [data-testid="stFooter"] { display: none !important; }
-
-    /* ── Botões por texto/aria ── */
-    button[title="Deploy"] { display: none !important; }
-    button[aria-label="Deploy"] { display: none !important; }
-    button[aria-label="Share"] { display: none !important; }
-    button[title="Share"] { display: none !important; }
-
-    /* ── Classes dinâmicas do Streamlit ── */
-    .stAppDeployButton { display: none !important; }
-    .stDeployButton { display: none !important; }
-    div[class*="deployButton"] { display: none !important; }
-    div[class*="viewerBadge"] { display: none !important; }
-    div[class*="StatusWidget"] { display: none !important; }
-    iframe[title="streamlit_analytics"] { display: none !important; }
-
-    /* ── Sidebar ── */
-    section[data-testid="stSidebar"] { display: none !important; }
-
-    /* ── Rodapé "Made with Streamlit" ── */
-    .viewerBadge_container__1QSob { display: none !important; }
-    .styles_viewerBadge__1yB5_ { display: none !important; }
-    #stDecoration { display: none !important; }
-
-    /* ── Padding/margin zerado ── */
-    .block-container, .element-container, .stMarkdown {
-        padding: 0 !important;
-        margin: 0 !important;
-        max-width: 100% !important;
-    }
-    .main, [data-testid="stAppViewContainer"] {
-        background: #fff !important;
-        padding: 0 !important;
-        margin: 0 !important;
-    }
-    .block-container { padding-bottom: 0 !important; }
-
-    /* ── Botões do Streamlit fora do dialog ficam invisíveis (usados como triggers) ── */
-    .stButton > button {
-        position: fixed !important;
-        left: -9999px !important;
-        opacity: 0 !important;
-        pointer-events: all !important;
-        width: 1px !important;
-        height: 1px !important;
-    }
-    [data-testid="stHorizontalBlock"] {
-        gap: 0 !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        height: 0 !important;
-        overflow: visible !important;
-        position: relative !important;
-    }
-
-    /* ── iframe do board ocupa toda a tela ── */
-    iframe {
-        position: fixed !important;
-        top: 0 !important;
-        left: 0 !important;
-        width: 100vw !important;
-        height: 100dvh !important;
-        border: none !important;
-        z-index: 9999 !important;
-    }
-    @media (max-width: 900px) {
-        iframe {
-            position: relative !important;
-            width: 100% !important;
-            height: 100dvh !important;
-            overflow: auto !important;
-        }
-        [data-testid="stAppViewContainer"],
-        [data-testid="stMain"],
-        .main, .block-container {
-            height: 100dvh !important;
-            overflow: visible !important;
-            padding: 0 !important;
-        }
-    }
-
-    /* ── Dialogs por cima de tudo ── */
-    div[data-testid="stDialog"] { z-index: 99999 !important; position: fixed !important; }
-    div[data-testid="stDialog"] .stButton > button {
-        font-size: 13px !important;
-        color: #374151 !important;
-        background: #fff !important;
-        border: 1px solid rgba(0,0,0,.12) !important;
-        padding: 6px 14px !important;
-        height: 34px !important;
-        width: auto !important;
-        border-radius: 8px !important;
-        cursor: pointer !important;
-        position: relative !important;
-        left: auto !important;
-        top: auto !important;
-        opacity: 1 !important;
-    }
-    div[data-testid="stDialog"] .stButton > button[kind="primary"] {
-        background: #1d4ed8 !important;
-        border-color: #1d4ed8 !important;
-        color: #fff !important;
-    }
-    div[data-testid="stDialog"] [data-testid="stHorizontalBlock"] {
-        height: auto !important;
-        overflow: visible !important;
-        gap: 8px !important;
-    }
-
-    /* ── Fontes ── */
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-    * { font-family: 'Inter', sans-serif !important; }
-</style>
-"""
 
 # ── EMAIL: TAREFA CRIADA ──────────────────────────────────────────────
 def send_task_created_email(task_row):
@@ -321,91 +189,12 @@ if not st.session_state.get("logged_in"):
     s = load_session()
     if not s:
         st.set_page_config(layout="centered", initial_sidebar_state="collapsed")
-        # Injeta CSS de ocultação mesmo na tela de login
-        st.markdown(HIDE_STREAMLIT_STYLE, unsafe_allow_html=True)
         st.error("⚠️ Faça login primeiro!")
         if st.button("← Login", key="go_back"):
             st.switch_page("app.py")
         st.stop()
 
 st.set_page_config(layout="wide", initial_sidebar_state="collapsed")
-
-# ── INJEÇÃO DO CSS DE OCULTAÇÃO (primeiro elemento renderizado) ───────
-st.markdown(HIDE_STREAMLIT_STYLE, unsafe_allow_html=True)
-
-# ── SCRIPT JS para remoção dinâmica (elimina elementos recriados pelo React do Streamlit) ──
-components.html("""
-<script>
-(function() {
-    const SELECTORS = [
-        'footer',
-        'header',
-        '#MainMenu',
-        '[data-testid="stToolbar"]',
-        '[data-testid="stToolbarActions"]',
-        '[data-testid="stDecoration"]',
-        '[data-testid="stStatusWidget"]',
-        '[data-testid="collapsedControl"]',
-        '[data-testid="stSidebarCollapsedControl"]',
-        '[data-testid="manage-app-button"]',
-        '[data-testid="stBaseButton-header"]',
-        '[data-testid="stAppDeployButton"]',
-        '[data-testid="stFooter"]',
-        '.stAppDeployButton',
-        '.stDeployButton',
-        '.viewerBadge_container__1QSob',
-        '.styles_viewerBadge__1yB5_',
-        '#stDecoration',
-    ];
-
-    function hideAll() {
-        const doc = window.parent ? window.parent.document : document;
-        SELECTORS.forEach(function(sel) {
-            try {
-                doc.querySelectorAll(sel).forEach(function(el) {
-                    el.style.setProperty('display',     'none',      'important');
-                    el.style.setProperty('visibility',  'hidden',    'important');
-                    el.style.setProperty('height',      '0',         'important');
-                    el.style.setProperty('overflow',    'hidden',    'important');
-                    el.style.setProperty('margin',      '0',         'important');
-                    el.style.setProperty('padding',     '0',         'important');
-                    el.style.setProperty('pointer-events', 'none',   'important');
-                });
-            } catch(e) {}
-        });
-
-        // Remove espaço extra deixado pelo rodapé
-        try {
-            const app = doc.querySelector('.stApp') || doc.querySelector('[data-testid="stAppViewContainer"]');
-            if (app) {
-                app.style.setProperty('margin-bottom',  '0', 'important');
-                app.style.setProperty('padding-bottom', '0', 'important');
-            }
-            const main = doc.querySelector('[data-testid="stMain"]') || doc.querySelector('.main');
-            if (main) {
-                main.style.setProperty('padding-bottom', '0', 'important');
-            }
-        } catch(e) {}
-    }
-
-    // Executa imediatamente
-    hideAll();
-
-    // Observa mudanças no DOM para esconder elementos reinseridos pelo React
-    try {
-        const target = window.parent ? window.parent.document.body : document.body;
-        if (target) {
-            const obs = new MutationObserver(hideAll);
-            obs.observe(target, { childList: true, subtree: true });
-        }
-    } catch(e) {}
-
-    // Fallback: intervalo de segurança
-    setInterval(hideAll, 800);
-})();
-</script>
-""", height=0)
-
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 def calc_status(d):
@@ -427,6 +216,7 @@ def recalc():
             formulas = make_formulas(row_num, resp_id, user_id)
             for k, val in formulas.items():
                 df.loc[i, k] = val
+          
         conn.update(worksheet="tasks", data=df)
         load_data.clear()
         return True
@@ -503,16 +293,31 @@ def update_sheet(td, action):
         return False
 
 
-# ── BADGE HELPERS ─────────────────────────────────────────────────────
-def pbadge(p):
-    p = str(p).lower()
-    c = "b-high" if any(x in p for x in ['alta','crítica','critica','high']) else \
-        "b-med"  if any(x in p for x in ['média','media','medium','normal']) else "b-low"
-    return f'<span class="badge {c}">{p.title()}</span>'
-
-def sbadge(s):
-    c = {"Atrasada": "b-late", "Curto Prazo": "b-soon"}.get(s, "b-ok")
-    return f'<span class="badge {c}">{s}</span>'
+# ── CSS ───────────────────────────────────────────────────────────────
+st.markdown("""<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+*{font-family:'Inter',sans-serif!important}
+#MainMenu,footer,header,.stDeployButton,[data-testid="stToolbar"],[data-testid="stToolbarActions"],
+[data-testid="stDecoration"],[data-testid="stStatusWidget"],[data-testid="collapsedControl"],
+[data-testid="stSidebarCollapsedControl"],[data-testid="manage-app-button"],[data-testid="stBaseButton-header"],
+button[title="Deploy"],button[aria-label="Deploy"],button[aria-label="Share"],button[title="Share"],
+.stAppDeployButton,section[data-testid="stSidebar"],div[class*="deployButton"],div[class*="viewerBadge"],
+div[class*="StatusWidget"],iframe[title="streamlit_analytics"]{display:none!important}
+footer{visibility:hidden!important;height:0!important}
+.block-container,.element-container,.stMarkdown{padding:0!important;margin:0!important;max-width:100%!important}
+.stButton>button{position:fixed!important;left:-9999px!important;opacity:0!important;pointer-events:all!important;width:1px!important;height:1px!important}
+[data-testid="stHorizontalBlock"]{gap:0!important;margin:0!important;padding:0!important;height:0!important;overflow:visible!important;position:relative!important}
+iframe{position:fixed!important;top:0!important;left:0!important;width:100vw!important;height:100dvh!important;border:none!important;z-index:9999!important}
+@media(max-width:900px){
+  iframe{position:relative!important;width:100%!important;height:100dvh!important;overflow:auto!important}
+  [data-testid="stAppViewContainer"],[data-testid="stMain"],.main,.block-container{height:100dvh!important;overflow:visible!important;padding:0!important}
+}
+.main,[data-testid="stAppViewContainer"]{background:#fff!important}
+div[data-testid="stDialog"]{z-index:99999!important;position:fixed!important}
+div[data-testid="stDialog"] .stButton>button{font-size:13px!important;color:#374151!important;background:#fff!important;border:1px solid rgba(0,0,0,.12)!important;padding:6px 14px!important;height:34px!important;width:auto!important;border-radius:8px!important;cursor:pointer!important;position:relative!important;left:auto!important;top:auto!important;opacity:1!important}
+div[data-testid="stDialog"] .stButton>button[kind="primary"]{background:#1d4ed8!important;border-color:#1d4ed8!important;color:#fff!important}
+div[data-testid="stDialog"] [data-testid="stHorizontalBlock"]{height:auto!important;overflow:visible!important;gap:8px!important}
+</style>""", unsafe_allow_html=True)
 
 # ── STATE ──
 for k, v in [('dialog_action', None), ('dialog_task_id', None), ('show_menu', False)]:
@@ -697,6 +502,17 @@ def dialog():
 
 if st.session_state.dialog_action in ['create', 'edit', 'delete', 'edit_user']:
     dialog()
+
+# ── BADGE HELPERS ─────────────────────────────────────────────────────
+def pbadge(p):
+    p = str(p).lower()
+    c = "b-high" if any(x in p for x in ['alta','crítica','critica','high']) else \
+        "b-med"  if any(x in p for x in ['média','media','medium','normal']) else "b-low"
+    return f'<span class="badge {c}">{p.title()}</span>'
+
+def sbadge(s):
+    c = {"Atrasada": "b-late", "Curto Prazo": "b-soon"}.get(s, "b-ok")
+    return f'<span class="badge {c}">{s}</span>'
 
 # ── BUILD BOARD HTML ──────────────────────────────────────────────────
 def build_board(df, u, img, mins, show_menu, prios, stats, resps):
@@ -946,7 +762,6 @@ document.querySelectorAll('.dz').forEach(z=>{{
 }});
 </script></body></html>'''
 
-# ── RENDER BOARD ──────────────────────────────────────────────────────
 components.html(
     build_board(fdf, user, img_url, mins, st.session_state.show_menu, all_prio, all_stat, users_list),
     height=4000, scrolling=True
